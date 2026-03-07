@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y \
 
 # Install gogcli (Linux version)
 RUN curl -L -o gogcli.tar.gz https://github.com/steipete/gogcli/releases/download/v0.11.0/gogcli_0.11.0_linux_amd64.tar.gz \
-    && tar -xzf gogcli.tar.gz gogcli \
-    && mv gogcli /usr/local/bin/gog \
+    && tar -xzf gogcli.tar.gz gog \
+    && mv gog /usr/local/bin/gog \
     && rm gogcli.tar.gz
 
 # Create app directory
