@@ -16,8 +16,17 @@ class FirebaseMemory {
 
     constructor() {
         try {
-            const serviceAccountPath = join(process.cwd(), config.googleCredentials);
-            const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+            let serviceAccount;
+            const envServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+            if (envServiceAccount) {
+                serviceAccount = JSON.parse(envServiceAccount);
+                console.log('📦 Usando credenciales de Firebase desde variable de entorno');
+            } else {
+                const serviceAccountPath = join(process.cwd(), config.googleCredentials);
+                serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+                console.log('📄 Usando credenciales de Firebase desde archivo local');
+            }
 
             if (!admin.apps.length) {
                 admin.initializeApp({

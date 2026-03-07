@@ -23,7 +23,8 @@ export const gogToolsDef = {
 
 export async function executeGogCommand(args: { command: string }): Promise<string> {
     try {
-        const { stdout, stderr } = await execPromise(`.\\gog.exe ${args.command}`);
+        const binary = process.platform === 'win32' ? '.\\gog.exe' : 'gog';
+        const { stdout, stderr } = await execPromise(`${binary} ${args.command}`);
         return stdout || stderr || 'Command executed with no output.';
     } catch (error: any) {
         if (error.message.includes("is not recognized")) {
