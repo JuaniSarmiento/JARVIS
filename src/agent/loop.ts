@@ -40,14 +40,20 @@ export class AgentLoop {
             const choice = response.choices[0];
             const responseMessage = choice.message;
 
-            // Add assistant response to both memory and current loop context
-            await memoryDb.addMessage(userId, {
+            // Sanitize assistant response for future LLM calls (remove reasoning_details and other non-standard fields)
+            const cleanAssistantMessage: any = {
                 role: 'assistant',
                 content: responseMessage.content || '',
-                name: undefined,
-                tool_call_id: undefined
+            };
+            if (responseMessage.tool_calls) {
+                cleanAssistantMessage.tool_calls = responseMessage.tool_calls;
+            }
+
+            // Add assistant response to both memory and current loop context
+            await memoryDb.addMessage(userId, {
+                ...cleanAssistantMessage,
             });
-            messages.push(responseMessage);
+            messages.push(cleanAssistantMessage);
 
             // Check if LLM wanted to call a tool
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {

@@ -8,6 +8,7 @@ interface MessageRow {
     content: string;
     name?: string;
     tool_call_id?: string;
+    tool_calls?: any[];
     timestamp?: any;
 }
 
@@ -64,6 +65,7 @@ class FirebaseMemory {
             };
             if (data.name) msg.name = data.name;
             if (data.tool_call_id) msg.tool_call_id = data.tool_call_id;
+            if (data.tool_calls) msg.tool_calls = data.tool_calls;
             return msg;
         });
 
