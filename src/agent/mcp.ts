@@ -25,8 +25,8 @@ class MCPManager {
     private async addTavilyServer() {
         try {
             const transport = new StdioClientTransport({
-                command: 'npx',
-                args: ['-y', '@mcptools/mcp-tavily'],
+                command: 'node',
+                args: ['./node_modules/@mcptools/mcp-tavily/dist/index.js'],
                 env: { ...process.env, TAVILY_API_KEY: config.tavilyApiKey }
             });
 
