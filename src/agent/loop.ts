@@ -28,9 +28,7 @@ Always prioritize security and verify critical actions with the user before exec
 export class AgentLoop {
     private MAX_ITERATIONS = 5;
 
-    constructor() { 
-        mcpManager.init();
-    }
+    constructor() { }
 
     async run(userId: string, userMessage: string): Promise<string> {
         // Save user message to Firebase
@@ -50,8 +48,9 @@ export class AgentLoop {
 
             const mcpTools = mcpManager.getTools();
             const allTools = [...coreTools, ...mcpTools];
+            const toolsPayload = allTools.length > 0 ? allTools : undefined;
 
-            const response = await llmProvider.createChatCompletion(messages, allTools);
+            const response = await llmProvider.createChatCompletion(messages, toolsPayload);
             const choice = response.choices[0];
             const responseMessage = choice.message;
 
@@ -74,7 +73,17 @@ export class AgentLoop {
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
                 for (const toolCall of responseMessage.tool_calls) {
                     const functionName = toolCall.function.name;
-                    const functionArgs = JSON.parse(toolCall.function.arguments);
+                    let functionArgs: any;
+                    
+                    try {
+                        const rawArgs = toolCall.function.arguments;
+                        // Basic cleaning to handle common LLM screw-ups with JSON
+                        const cleanArgs = rawArgs.replace(/\\n/g, '').trim();
+                        functionArgs = JSON.parse(cleanArgs);
+                    } catch (parseError) {
+                        console.error(`[Error] Failed to parse tool arguments for ${functionName}:`, toolCall.function.arguments);
+                        functionArgs = {}; // Fallback to empty object
+                    }
 
                     let functionResponse: string;
                     try {
