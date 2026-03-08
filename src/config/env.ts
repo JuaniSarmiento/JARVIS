@@ -9,6 +9,7 @@ export const config = {
     openRouterModel: process.env.OPENROUTER_MODEL || 'openrouter/free',
     dbPath: process.env.DB_PATH || './memory.db',
     googleCredentials: process.env.GOOGLE_APPLICATION_CREDENTIALS || './service-account.json',
+    tavilyApiKey: process.env.TAVILY_API_KEY || '',
 };
 
 // Validate critical env variables

@@ -22,7 +22,7 @@ class LLMProvider {
         }
     }
 
-    async createChatCompletion(messages: any[], useFallback = false): Promise<any> {
+    async createChatCompletion(messages: any[], overrideTools?: any[], useFallback = false): Promise<any> {
         const activeClient = useFallback ? this.fallbackClient : (this.groqClient || this.fallbackClient);
 
         if (!activeClient) {
@@ -37,14 +37,14 @@ class LLMProvider {
                 model: model,
                 messages: messages,
                 // @ts-ignore
-                tools: tools,
+                tools: overrideTools || tools,
                 temperature: 0.7,
             });
             return response;
         } catch (error: any) {
             if (!isUsingFallback && this.fallbackClient) {
                 console.warn('Groq requested failed, falling back to OpenRouter...', error.message);
-                return this.createChatCompletion(messages, true);
+                return this.createChatCompletion(messages, overrideTools, true);
             }
         }
     }

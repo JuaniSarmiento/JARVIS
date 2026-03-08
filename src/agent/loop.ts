@@ -1,24 +1,36 @@
 import { llmProvider } from './llm.js';
-import { executeTool } from '../tools/registry.js';
+import { executeTool as executeCoreTool, tools as coreTools } from '../tools/registry.js';
 import { memoryDb } from '../db/firebase.js';
+import { mcpManager } from './mcp.js';
 
 const SYSTEM_PROMPT = `You are Jarvis, a personal AI assistant built from scratch to run locally.
 You communicate exclusively via Telegram. You are helpful, secure, and concise.
 Provide markdown format for readability.
 
+CRITICAL: You have the ability to IMPROVE YOURSELF. You can read, write, and list your own source code using the 'file_manager' tool.
+If the user asks for a new feature, a bug fix, or a code improvement, you should:
+1. List the files in the 'src' directory to understand the structure.
+2. Read the relevant files.
+3. Plan the changes.
+4. Write the updated code back to the files.
+5. (Optional) Run 'formatting_tools' with action 'build' to verify your changes.
+
 Your integrated skills:
 1. Google Workspace (gog): You can manage Gmail/Calendar/Drive using the 'google_workspace_cli' tool.
 2. GitHub (gh): You can manage issues and PRs using 'github_cli'.
-3. PR Conventions (n8n): When creating PRs, you MUST use the convention: <type>(<scope>): <summary>. Types: feat, fix, perf, test, docs, refactor, build, ci, chore. Summary must use imperative present tense and be capitalized.
-4. Code Quality: You can run formatting/linting via 'formatting_tools'.
-5. Agent Development: You expert at creating autonomous subprocesses (agents). Use clear identifiers (lowercase-hyphens), triggering descriptions with examples, and a structured system prompt (responsibilities, process, output format).
+3. Code Quality & Self-Improvement: Use 'file_manager' to edit your own code and 'formatting_tools' to build/lint.
+4. Agent Development: You expert at creating autonomous subprocesses (agents). 
+5. Web Search: Access real-time information using 'mcp_tavily_search'.
 
 Always prioritize security and verify critical actions with the user before executing.`;
+
 
 export class AgentLoop {
     private MAX_ITERATIONS = 5;
 
-    constructor() { }
+    constructor() { 
+        mcpManager.init();
+    }
 
     async run(userId: string, userMessage: string): Promise<string> {
         // Save user message to Firebase
@@ -36,7 +48,10 @@ export class AgentLoop {
         while (iterations < this.MAX_ITERATIONS) {
             iterations++;
 
-            const response = await llmProvider.createChatCompletion(messages);
+            const mcpTools = mcpManager.getTools();
+            const allTools = [...coreTools, ...mcpTools];
+
+            const response = await llmProvider.createChatCompletion(messages, allTools);
             const choice = response.choices[0];
             const responseMessage = choice.message;
 
@@ -64,7 +79,11 @@ export class AgentLoop {
                     let functionResponse: string;
                     try {
                         console.log(`[UserId: ${userId}] Executing tool: ${functionName}`);
-                        functionResponse = await executeTool(functionName, functionArgs);
+                        if (functionName.startsWith('mcp_')) {
+                            functionResponse = await mcpManager.executeTool(functionName, functionArgs);
+                        } else {
+                            functionResponse = await executeCoreTool(functionName, functionArgs);
+                        }
                     } catch (error: any) {
                         functionResponse = `Error executing tool: ${error.message}`;
                     }
