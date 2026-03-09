@@ -1,37 +1,54 @@
-# Use Node.js as base image
-FROM node:20-slim
+# =========================================================
+# JARVIS AI ORCHESTRATOR - DEPLOYMENT READY DOCKERFILE
+# =========================================================
 
-# Install dependencies for gh CLI and gogcli
-RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    unzip \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# --- Etapa 1: Build de la aplicación (Typescript -> JS) ---
+FROM node:20-alpine AS builder
 
-# Install gogcli (Linux version)
-RUN curl -L -o gogcli.tar.gz https://github.com/steipete/gogcli/releases/download/v0.11.0/gogcli_0.11.0_linux_amd64.tar.gz \
-    && tar -xzf gogcli.tar.gz gog \
-    && mv gog /usr/local/bin/gog \
-    && rm gogcli.tar.gz
-
-# Create app directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copiar configuración de NPM (optimizando caché)
+COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm install
+# Instalación estricta de dependencias respetando el lockfile
+# Usamos legacy-peer-deps para evitar los conflictos encontrados en BullMQ API
+RUN npm ci --legacy-peer-deps
 
-# Copy project files
-COPY . .
+# Copiamos el resto del código y archivos críticos 
+COPY tsconfig.json .
+COPY src ./src
 
-# Build the project
+# Build Typescript (genera la carpeta /dist)
 RUN npm run build
 
-# Start the application
+
+# --- Etapa 2: Imagen de Producción Reducida (Runtime) ---
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Asignar usuario no root para mejorar la seguridad
+RUN addgroup -S -g 1001 nodejs && adduser -S -u 1001 jarvis
+RUN chown -R jarvis:nodejs /app
+
+USER jarvis
+
+# Copiamos solo los manifiestos de paquetes
+COPY --from=builder --chown=jarvis:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=jarvis:nodejs /app/package-lock.json* ./
+
+# Instalamos SOLAMENTE dependencias de producción (redactando peso de la imagen)
+RUN npm ci --only=production --legacy-peer-deps
+
+# Copiamos el build transpilado generado en la Etapa 1
+COPY --from=builder --chown=jarvis:nodejs /app/dist ./dist
+
+# Variables de Entorno base (se inyectarán/sobrescribirán desde el dashboard cloud - Railway, Render, etc.)
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Exponemos el puerto de Express y Bull-Board
+EXPOSE 3000
+
+# Punto de entrada de la aplicación
 CMD ["npm", "start"]

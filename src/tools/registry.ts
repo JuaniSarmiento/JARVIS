@@ -39,7 +39,11 @@ export const mainJarvisTools = [
     installSkillDef
 ];
 
-export async function executeTool(name: string, args: any): Promise<string> {
+/**
+ * Registro y Dispatcher de herramientas centralizado.
+ * Soporte para onProgress habilitado.
+ */
+export async function executeTool(name: string, args: any, onProgress?: (msg: string) => Promise<void>): Promise<string> {
     switch (name) {
         case 'get_current_time':
             return await executeGetCurrentTime(args);
@@ -56,7 +60,8 @@ export async function executeTool(name: string, args: any): Promise<string> {
         case 'read_url':
             return await executeReadUrl(args);
         case 'delegate_to_agent':
-            return await executeDelegateToAgent(args);
+            // Pasamos el onProgress al delegador
+            return await executeDelegateToAgent(args, onProgress);
         case 'read_file':
             return await executeReadFile(args);
         case 'write_file':

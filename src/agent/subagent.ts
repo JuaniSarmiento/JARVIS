@@ -9,12 +9,15 @@ export interface SubAgentConfig {
 }
 
 export class SubAgent {
-    private MAX_ITERATIONS = 15; // Aumentado para tareas complejas como Coding
+    private MAX_ITERATIONS = 15;
 
     constructor(private config: SubAgentConfig) { }
 
-    async runTask(taskDescription: string, context?: string): Promise<string> {
-        console.log(`[SubAgent: ${this.config.name}] Iniciando tarea: ${taskDescription.substring(0, 50)}...`);
+    /**
+     * Ejecuta una tarea delegada con soporte para reportar progreso.
+     */
+    async runTask(taskDescription: string, context?: string, onProgress?: (msg: string) => Promise<void>): Promise<string> {
+        if (onProgress) await onProgress(`[SubAgent: ${this.config.name}] Iniciando: ${taskDescription.substring(0, 60)}...`);
 
         let messages: any[] = [
             { role: 'system', content: this.config.systemPrompt },
@@ -23,7 +26,6 @@ export class SubAgent {
 
         let iterations = 0;
         while (iterations < this.MAX_ITERATIONS) {
-            // Trim messages if they grow too large to save tokens (keep system + initial user + last 12)
             if (messages.length > 20) {
                 messages = [messages[0], messages[1], ...messages.slice(-12)];
             }
@@ -41,12 +43,13 @@ export class SubAgent {
 
                     try {
                         functionArgs = parseRobustJSON(toolCall.function.arguments);
-                        console.log(`[SubAgent: ${this.config.name}] Herramienta: ${functionName}`);
-                        functionResponse = await executeTool(functionName, functionArgs);
+                        if (onProgress) await onProgress(`[SubAgent: ${this.config.name}] Ejecutando tool: ${functionName}`);
+
+                        // Propagamos el callback de progreso a las herramientas si lo soportan
+                        functionResponse = await executeTool(functionName, functionArgs, onProgress);
                     } catch (error: any) {
                         console.error(`[SubAgent Error] ${this.config.name} falló en ${functionName}:`, error.message);
-                        // Reportamos el error al subagente para que intente corregirlo
-                        functionResponse = `ERROR: No se pudo ejecutar la herramienta (${error.message}). Por favor, verifica los argumentos y vuelve a intentarlo con el formato correcto.`;
+                        functionResponse = `ERROR: No se pudo ejecutar la herramienta (${error.message}). Reintenta con el formato correcto.`;
                     }
 
                     messages.push({
@@ -60,7 +63,7 @@ export class SubAgent {
             }
 
             const finalResponse = responseMessage.content || "Tarea completada sin reporte.";
-            console.log(`[SubAgent: ${this.config.name}] Tarea finalizada.`);
+            if (onProgress) await onProgress(`[SubAgent: ${this.config.name}] Tarea finalizada con éxito.`);
             return finalResponse;
         }
 

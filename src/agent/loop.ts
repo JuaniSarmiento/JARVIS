@@ -3,248 +3,294 @@ import { executeTool as executeCoreTool, mainJarvisTools as coreTools } from '..
 import { memoryDb } from '../db/firebase.js';
 import { mcpManager } from './mcp.js';
 import { parseRobustJSON } from '../utils/json.js';
-
-const SYSTEM_PROMPT = `You are Jarvis, the Elite AI Orchestrator for Juani. Your intelligence and capabilities are at the level of Perplexity Pro, Gemini Ultra, and Claude 3.5 Sonnet.
-
-Your mission is to ORCHESTRATE a swarm of specialized "Capo" agents to execute tasks with military precision and superior quality.
-
-Available Subagents (The Elite Swarm):
-1. 'coder': The Master Artisan. Writes high-quality, efficient, and secure code.
-2. 'doc': The Architect of Knowledge. Uses files like requirements.md, proyecto.md, and arquitectura.md as templates to build world-class documentation.
-3. 'qa': The Gatekeeper. Critically analyzes code, looks for bugs, and ensures absolute quality before any deploy.
-4. 'deploy': The SRE Specialist. Handles Docker, server configurations, and CI/CD pipelines.
-5. 'health': The Bio-Analytic. Analyzes smartwatch metrics and provides high-level health insights.
-6. 'sports': The Tactical Expert. An absolute "capo" in Football (tactics, rosters) and F1 (strategy, data).
-7. 'research': 'CapoAI'. Your deep-research engine. Comparable to Perplexity for finding complex info and synthesizing strategy.
-
-Integrated features:
-- Self-Improvement: Use 'install_skill' to add new capabilities to yourself.
-- Automation Center: Integrates with n8n via webhooks for complex flows.
-
-Always prioritize efficiency. If a complex plan is provided, BEGIN EXECUTION IMMEDIATELY using the 'delegate_to_agent' tool. Do not just acknowledge the plan; start it. 
-
-Military rule: Mission first.
-1. If a subagent reports an error, do NOT just tell the user. You must analyze the error and try to fix it by delegating again with better instructions or using other tools.
-2. If you are 'waiting' for a subagent, you are NOT waiting; you are the one who drives the process. If a task isn't finished, call the agent again or check the progress.
-3. NEVER respond with just text if there is pending work in a multi-step mission. Always call a tool to move the mission forward.
-4. If the user asks 'how is it going?', do not just give status; actually VERIFY the status using 'list_dir' or 'read_file' and then CONTINUE the task if it's stuck.`;
-
-
 import { config } from '../config/env.js';
+import { redisConnection } from '../db/redis.js';
 
-enum OrchestratorState {
-    THINKING,
-    EXECUTING_ACTION,
-    RESPONDING,
-    ERROR
+/**
+ * 1. DEFINICIÓN DE ESTADOS (FSM Evolucionada)
+ */
+export enum OrchestratorState {
+    INIT = "INIT",
+    PLANNING = "PLANNING",
+    EXECUTING = "EXECUTING",
+    EVALUATING = "EVALUATING",
+    RESPONDING = "RESPONDING",
+    FATAL_ERROR = "FATAL_ERROR"
 }
 
-
-// 4. Compresión de Memoria Dinámica
-function compressContext(messages: any[], maxTokens: number): any[] {
-    // Estimación muy básica: 1 token ~= 4 caracteres
-    const calculateTokens = (msg: any) => (msg.content ? msg.content.length / 4 : 50);
-
-    let totalTokens = messages.reduce((acc, msg) => acc + calculateTokens(msg), 0);
-
-    if (totalTokens <= maxTokens) {
-        return messages;
-    }
-
-    console.log(`[Memory] Compresión activada: ${totalTokens} tokens calculados (Límite: ${maxTokens})`);
-
-    // Siempre conservamos el system prompt (index 0) y el mensaje de usuario original (index 1) si existe
-    const systemPrompt = messages[0];
-    const userPrompt = messages.length > 1 ? messages[1] : null;
-
-    // Buscamos cuánto recortar del medio para encajar
-    let finalMessages = userPrompt ? [systemPrompt, userPrompt] : [systemPrompt];
-    let currentTokens = calculateTokens(systemPrompt) + (userPrompt ? calculateTokens(userPrompt) : 0);
-
-    // Agarramos desde el final hacia el principio hasta llenar el límite
-    const tailMessages = [];
-    for (let i = messages.length - 1; i > (userPrompt ? 1 : 0); i--) {
-        const msgTks = calculateTokens(messages[i]);
-        if (currentTokens + msgTks < maxTokens) {
-            tailMessages.unshift(messages[i]);
-            currentTokens += msgTks;
-        } else {
-            break;
-        }
-    }
-
-    // Insertar un mensaje de advertencia del recorte de memoria
-    finalMessages.push({
-        role: 'system',
-        content: '[SISTEMA: El historial ha sido comprimido para ahorrar tokens. Detalles intermedios pueden faltar.]'
-    });
-
-    return [...finalMessages, ...tailMessages];
+interface PlanStep {
+    id: string;
+    description: string;
+    dependsOn: string[]; // Tarea 1: DAG de dependencias
+    status: "pending" | "running" | "completed" | "failed";
+    agent?: string;
+    task?: string;
+    results?: string;
 }
 
-export class AgentLoop {
+const SYSTEM_PROMPT = `You are Jarvis, the Elite AI Orchestrator. 
+Your mission is to ORCHESTRATE a swarm of specialized agents (the Elite Swarm).
+Be concise, surgical, and strategic. Your memory is limited; distill information.
+`;
+
+const PLANNING_PROMPT = `Genera un Grafo Acíclico Dirigido (DAG) de la misión.
+Responde ÚNICAMENTE con un JSON con esta estructura:
+{
+  "mission_goal": "...",
+  "plan": [
+    { "id": "step1", "description": "...", "dependsOn": [], "agent": "coder", "task": "..." },
+    { "id": "step2", "description": "...", "dependsOn": ["step1"], "agent": "qa", "task": "..." }
+  ]
+}
+`;
+
+export class JarvisOrchestrator {
+    private state: OrchestratorState = OrchestratorState.INIT;
+    private userId: string = "";
+    private jobId: string = "";
+    private history: any[] = [];
+    private dag: PlanStep[] = [];
+    private currentIteration: number = 0;
+    private onProgress?: (msg: string) => Promise<void>;
+
     constructor() { }
 
-    async run(userId: string, userMessage: string, notifier?: (msg: string) => Promise<void>): Promise<string> {
-        console.log(`[UserId: ${userId}] Mensaje recibido: "${userMessage.substring(0, 100)}..."`);
+    async run(userId: string, userMessage: string, onProgress?: (msg: string) => Promise<void>, jobId?: string): Promise<string> {
+        this.userId = userId;
+        this.jobId = jobId || `standalone-${Date.now()}`;
+        this.onProgress = onProgress;
+        this.currentIteration = 0;
+        this.state = OrchestratorState.INIT;
+        this.dag = [];
 
-        // El usuario y la respuesta final se guardan en BD (Aislamiento de Memoria)
         await memoryDb.addMessage(userId, { role: 'user', content: userMessage });
+        const dbHistory = await memoryDb.getHistory(userId, 15); // Límite de historia para ahorrar tokens
 
-        let history = await memoryDb.getHistory(userId, 20);
+        this.history = dbHistory.length > 0 && dbHistory[0].role === 'system'
+            ? dbHistory
+            : [{ role: 'system', content: SYSTEM_PROMPT }, ...dbHistory];
 
-        if (history.length === 0 || history[0].role !== 'system') {
-            history = [{ role: 'system', content: SYSTEM_PROMPT }, ...history];
-        }
+        if (this.onProgress) await this.onProgress("🤖 **Jarvis** activado. Iniciando análisis estratégico...");
+        await this.syncStatus();
 
-        // Contexto aislado (scratchpad) de esta ejecución
-        let loopMessages = [...history];
-        let iterations = 0;
-        let evasionCount = 0;
-        let lastExecutionFailed = false;
-        let currentState: OrchestratorState = OrchestratorState.THINKING;
-        let finalOutput = "Sin respuesta generada.";
-
-        // 1. Grafo de Estados Simple (FSM)
-        while ([OrchestratorState.THINKING, OrchestratorState.EXECUTING_ACTION].includes(currentState) && iterations < config.maxIterations) {
-            iterations++;
-            console.log(`[UserId: ${userId}] [Estado: ${OrchestratorState[currentState]} | Iteración ${iterations}]`);
-
-            // Check Context size before query
-            loopMessages = compressContext(loopMessages, config.maxContextTokens);
-
-            const mcpTools = mcpManager.getTools();
-            const allTools = [...coreTools, ...mcpTools];
-            const toolsPayload = allTools.length > 0 ? allTools : undefined;
-
-            let response;
-            try {
-                response = await llmProvider.createChatCompletion(loopMessages, toolsPayload);
-            } catch (err: any) {
-                console.error(`[Error de Conexión LLM]: ${err.message}`);
-                currentState = OrchestratorState.ERROR;
-                finalOutput = `Error crítico del proveedor LLM: ${err.message}`;
+        // Bucle FSM principal
+        let shouldStop = false;
+        while (!shouldStop) {
+            const currentState = this.state as OrchestratorState;
+            if (currentState === OrchestratorState.RESPONDING || currentState === OrchestratorState.FATAL_ERROR) {
+                shouldStop = true;
                 break;
             }
 
-            const responseMessage = response.choices[0].message;
-
-            // --- CANDADO ANTI-EVASIVAS (3 STRIKES) ---
-            if (lastExecutionFailed && (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0)) {
-                evasionCount++;
-                console.warn(`[UserId: ${userId}] Anti-Evasiva activada: Intento ${evasionCount}/3`);
-
-                if (evasionCount >= 3) {
-                    const fatalMsg = "Jefe, el agente se clavó en un loop de evasivas y lo maté para no gastar saldo. Revisá los logs.";
-                    console.error(`[UserId: ${userId}] FATAL ERROR: Máximo de evasivas alcanzado.`);
-                    if (notifier) await notifier(`🚨 **FATAL ERROR**: ${fatalMsg}`);
-                    currentState = OrchestratorState.ERROR;
-                    finalOutput = fatalMsg;
-                    break;
-                }
-
-                const rejectionMsg = "SISTEMA: ERROR CRÍTICO. No has llamado a ninguna herramienta para corregir el estado anterior (que falló). Es OBLIGATORIO usar una herramienta o el 'delegate_to_agent' corregido ahora. No se acepta texto plano.";
-                loopMessages.push({ role: 'system', content: rejectionMsg });
-                continue; // Volver a preguntar al LLM sin procesar esta respuesta "lazy"
+            this.currentIteration++;
+            if (this.currentIteration > config.maxIterations) {
+                if (this.onProgress) await this.onProgress("🚨 **FATAL ERROR**: Límite de iteraciones alcanzado.");
+                this.state = OrchestratorState.FATAL_ERROR;
+                await this.syncStatus();
+                break;
             }
-
-            if (responseMessage.content) {
-                console.log(`[UserId: ${userId}] Jarvis dice: "${responseMessage.content.substring(0, 100)}..."`);
-
-                // --- ESCUDO ANTI-JSON EN CONTENT (PARA FALLBACKS) ---
-                // Si el modelo devuelve JSON en el texto pero no en tool_calls
-                if (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0) {
-                    const content = responseMessage.content.trim();
-                    if (content.startsWith('{') && content.endsWith('}')) {
-                        try {
-                            const possibleTool = JSON.parse(content);
-                            if (possibleTool.name && possibleTool.arguments) {
-                                console.log(`[Memory] Detectado JSON bruto en content de ${userId}. Convirtiendo a tool_call...`);
-                                responseMessage.tool_calls = [{
-                                    id: `call_raw_${Date.now()}`,
-                                    type: 'function',
-                                    function: {
-                                        name: possibleTool.name,
-                                        arguments: typeof possibleTool.arguments === 'string'
-                                            ? possibleTool.arguments
-                                            : JSON.stringify(possibleTool.arguments)
-                                    }
-                                }];
-                                // Limpiamos el content para que no rompa Telegram con caracteres especiales
-                                responseMessage.content = `[Analizando misión: ${possibleTool.name}]`;
-                            }
-                        } catch (e) {
-                            // No es un JSON válido o no es una herramienta, ignoramos
-                        }
-                    }
-                }
-            }
-            loopMessages.push(responseMessage);
-
-            if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-                // El LLM quiere hacer algo
-                currentState = OrchestratorState.EXECUTING_ACTION;
-                lastExecutionFailed = false; // Reset de flags si decide actuar
-
-                for (const toolCall of responseMessage.tool_calls) {
-                    const functionName = toolCall.function.name;
-                    let functionArgs: any = {};
-                    let functionResponse: string;
-
-                    try {
-                        functionArgs = parseRobustJSON(toolCall.function.arguments);
-                        const toolMsg = `🛠️ Ejecutando: **${functionName}**${functionArgs.agentName ? ` (Subagente: ${functionArgs.agentName})` : ''}`;
-                        console.log(`[UserId: ${userId}] ${toolMsg}`);
-                        if (notifier) await notifier(toolMsg);
-
-                        if (functionName.startsWith('mcp_')) {
-                            functionResponse = await mcpManager.executeTool(functionName, functionArgs);
-                        } else {
-                            functionResponse = await executeCoreTool(functionName, functionArgs);
-                        }
-
-                        if (notifier && functionName === 'delegate_to_agent') {
-                            await notifier(`✅ **${functionArgs.agentName}** terminó su tarea.`);
-                        }
-                    } catch (error: any) {
-                        console.error(`[Tool Execution Error]: ${error.message}`);
-                        const errorMsg = `⚠️ Error en ${functionName}: ${error.message}`;
-                        if (notifier) await notifier(errorMsg);
-                        functionResponse = `SYSTEM ALARM: Error procesando tus argumentos o ejecutando la herramienta (${error.message}). Por favor, verifica el JSON y reintenta obligatoriamente con un tool_call corregido.`;
-                        lastExecutionFailed = true; // ACTIVAR CANDADO
-                    }
-
-                    loopMessages.push({
-                        role: 'tool',
-                        name: functionName,
-                        content: functionResponse,
-                        tool_call_id: toolCall.id
-                    });
-                }
-
-                // Vuelve a pensar
-                currentState = OrchestratorState.THINKING;
-            } else {
-                // No hay tool calls, es una respuesta directa al usuario
-                currentState = OrchestratorState.RESPONDING;
-                finalOutput = responseMessage.content || "El orquestador no ofreció una respuesta final clara.";
-            }
+            await this.step();
+            await this.syncStatus();
         }
 
-        if (iterations >= config.maxIterations) {
-            finalOutput = `ALERTA DE SISTEMA: He alcanzado mi límite arquitectónico de iteraciones (${config.maxIterations}) por ciclo. Por favor, revisa el comando o divídelo en pasos más pequeños.`;
-            // Asegurarse de que el usuario vea el último intento
-            const lastMsg = loopMessages[loopMessages.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
-                finalOutput += `\n\nProgreso final: ${lastMsg.content}`;
-            }
-        }
-
-        // 2. Aislamiento de Memoria (Solo guardamos el resultado destilado, NO los logs de las tools)
+        const finalOutput = this.history[this.history.length - 1]?.content || "Misión finalizada.";
         await memoryDb.addMessage(userId, { role: 'assistant', content: finalOutput });
+        await this.syncStatus("COMPLETED");
 
         return finalOutput;
     }
+
+    private async syncStatus(terminalStatus?: string) {
+        if (!this.jobId) return;
+
+        const completed = this.dag.filter(s => s.status === 'completed').length;
+        const total = this.dag.length || 1;
+        const progress = Math.round((completed / total) * 100);
+
+        const statusPayload = {
+            jobId: this.jobId,
+            userId: this.userId,
+            state: terminalStatus || this.state,
+            progress,
+            currentIteration: this.currentIteration,
+            tasksTotal: total,
+            tasksCompleted: completed,
+            plan: this.dag,
+            updatedAt: new Date().toISOString()
+        };
+
+        await redisConnection.set(`jarvis:status:${this.jobId}`, JSON.stringify(statusPayload), 'EX', 3600);
+    }
+
+    public async step(): Promise<void> {
+        switch (this.state) {
+            case OrchestratorState.INIT:
+                this.state = OrchestratorState.PLANNING;
+                break;
+            case OrchestratorState.PLANNING:
+                await this.executePlanning();
+                break;
+            case OrchestratorState.EXECUTING:
+                await this.executeParallelDAG();
+                break;
+            case OrchestratorState.EVALUATING:
+                await this.evaluateAndReplanning();
+                break;
+            default:
+                this.state = OrchestratorState.RESPONDING;
+        }
+    }
+
+    /**
+     * Tarea 1 & 2: Creación del Plan Táctico (DAG)
+     */
+    private async executePlanning(): Promise<void> {
+        if (this.onProgress) await this.onProgress("🧠 **STRATEGY**: Construyendo Grafo de Dependencias (DAG)...");
+
+        const messages = [...this.history, { role: 'system', content: PLANNING_PROMPT }];
+        try {
+            const response = await llmProvider.createChatCompletion(messages, []);
+            const parsed = parseRobustJSON(response.choices[0].message.content);
+
+            if (parsed.plan && Array.isArray(parsed.plan)) {
+                this.dag = parsed.plan.map((p: any) => ({ ...p, status: "pending" }));
+                if (this.onProgress) await this.onProgress(`📋 **Orden de Batalla**: ${this.dag.length} pasos estratégicos validados.`);
+                this.state = OrchestratorState.EXECUTING;
+            } else {
+                this.state = OrchestratorState.RESPONDING;
+            }
+        } catch (e) {
+            this.state = OrchestratorState.FATAL_ERROR;
+        }
+    }
+
+    /**
+     * Tarea 1 & 3: Ejecución de DAG con Respeto a Dependencias y Timeouts
+     */
+    private async executeParallelDAG(): Promise<void> {
+        const now = Date.now();
+        const STEP_TIMEOUT_MS = 1000 * 60 * 5; // 5 minutos de timeout por tarea
+
+        // 1. Detector de Deadlocks / Timeouts
+        const runningSteps = this.dag.filter(s => s.status === "running");
+        for (const step of runningSteps) {
+            const startTime = (step as any).startedAt || now;
+            if (now - startTime > STEP_TIMEOUT_MS) {
+                if (this.onProgress) await this.onProgress(`🚨 **TIMEOUT**: El paso ${step.id} excedió los 5 min. Forzando detención.`);
+                step.status = "failed";
+                step.results = "ERROR: Timeout de ejecución crítica superado.";
+            }
+        }
+
+        const readySteps = this.dag.filter(s =>
+            s.status === "pending" &&
+            s.dependsOn.every(depId => this.dag.find(d => d.id === depId)?.status === "completed")
+        );
+
+        if (readySteps.length === 0) {
+            const hasFailed = this.dag.some(s => s.status === "failed");
+            const allDone = this.dag.every(s => s.status === "completed");
+            this.state = (hasFailed || !allDone) ? OrchestratorState.EVALUATING : OrchestratorState.RESPONDING;
+            return;
+        }
+
+        if (this.onProgress) await this.onProgress(`⚡ **PARALLEL**: Disparando ${readySteps.length} tareas independientes...`);
+
+        // Ejecución en paralelo real controlada por el DAG
+        await Promise.allSettled(readySteps.map(async (step) => {
+            step.status = "running";
+            (step as any).startedAt = Date.now();
+            try {
+                const result = await this.dispatchAgent(step);
+                step.status = "completed";
+                // Tarea 3: Compresión de contexto inteligente (Determinista vs LLM)
+                step.results = await this.compressResult(result, this.isTechnicalStep(step));
+            } catch (e) {
+                step.status = "failed";
+            }
+        }));
+
+        this.state = OrchestratorState.EVALUATING;
+    }
+
+    /**
+     * Heurística simple para decidir si un paso es técnico/logs o lenguaje natural.
+     */
+    private isTechnicalStep(step: PlanStep): boolean {
+        const technicalAgents = ['coder', 'deploy', 'qa'];
+        return step.agent ? technicalAgents.includes(step.agent.toLowerCase()) : true;
+    }
+
+    /**
+     * Dispatcher de Agente/Tool con manejo de fallos
+     */
+    private async dispatchAgent(step: PlanStep): Promise<string> {
+        if (step.agent) {
+            return await executeCoreTool("delegate_to_agent", {
+                agentName: step.agent,
+                taskDescription: step.task || step.description
+            }, this.onProgress);
+        }
+        return "Paso sin agente asignado.";
+    }
+
+    /**
+     * Tarea 2: EVALUATING & REPLANNING (Dinámico)
+     */
+    private async evaluateAndReplanning(): Promise<void> {
+        const failedSteps = this.dag.filter(s => s.status === "failed");
+
+        if (failedSteps.length > 0) {
+            if (this.onProgress) await this.onProgress(`🥊 **HIT RECEIVED**: El plan falló en ${failedSteps.length} pasos. Recalculando ruta...`);
+
+            // Inyectamos los fallos en la historia para que el Replanning tenga contexto
+            const failureReport = failedSteps.map(s => `ID: ${s.id} falló su misión. Motivo: ${s.results || "Desconocido"}`).join("\n");
+            this.history.push({ role: 'system', content: `REPORTE DE DAÑOS:\n${failureReport}\nProcedé al REPLANNING ahora.` });
+
+            this.state = OrchestratorState.PLANNING; // Forzamos REPLANNING (Vuelta atrás en FSM)
+            return;
+        }
+
+        // Si todo va bien, inyectamos los resultados comprimidos en la historia central
+        const lastResults = this.dag.filter(s => s.status === "completed" && s.results && !this.history.some(h => h.content?.includes(s.id)));
+        lastResults.forEach(s => {
+            this.history.push({ role: 'system', content: `RESULTADO [${s.id}]: ${s.results}` });
+        });
+
+        // Si faltan pasos por ejecutar, volvemos a EXECUTING
+        const pendingSteps = this.dag.filter(s => s.status === "pending");
+        this.state = pendingSteps.length > 0 ? OrchestratorState.EXECUTING : OrchestratorState.RESPONDING;
+
+        // Limpieza final de historia si se excede el límite crítico de tokens
+        if (this.history.length > 25) {
+            if (this.onProgress) await this.onProgress("🧹 **CONSOLIDATING**: Comprimiendo memoria operativa...");
+            this.history = [this.history[0], ...this.history.slice(-10)];
+        }
+    }
+
+    /**
+     * Tarea 3: Trimming Determinista vs Summarizer de LLM
+     */
+    private async compressResult(raw: string, isTechnical: boolean): Promise<string> {
+        if (raw.length < 2000) return raw;
+
+        if (isTechnical) {
+            // "Fat Trimmer": Cabeza (Contexto inicial) + Cola (Error/Stacktrace)
+            // No gasta latencia ni dinero del API.
+            const header = raw.substring(0, 1000);
+            const footer = raw.substring(raw.length - 1000);
+            return `${header}\n\n[... CONTENIDO TÉCNICO TRUNCADO POR SEGURIDAD DE CONTEXTO ...]\n\n${footer}`;
+        }
+
+        try {
+            // Solo usamos LLM para reportes narrativos de agentes de Research o Doc
+            const prompt = `RESUMEN EJECUTIVO (Máximo 200 palabras): Extrae solo los hallazgos críticos de este reporte, ignorando la bitácora de pasos.\n\nContenido:\n${raw.substring(0, 5000)}`;
+            const summary = await llmProvider.createChatCompletion([{ role: 'user', content: prompt }], []);
+            return summary.choices[0].message.content;
+        } catch (e) {
+            return raw.substring(0, 1500) + "... [Truncado por fallo en sumador]";
+        }
+    }
 }
 
-export const agentLoop = new AgentLoop();
+export const agentLoop = new JarvisOrchestrator();
