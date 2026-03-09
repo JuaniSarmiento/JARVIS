@@ -6,6 +6,7 @@ import { allTools } from '../tools/registry.js';
 class LLMProvider {
     private groqClient: OpenAI | null = null;
     private fallbackClient: OpenAI | null = null;
+    private mistralClient: OpenAI | null = null;
     private geminiClient: GoogleGenerativeAI | null = null;
 
     constructor() {
@@ -24,6 +25,13 @@ class LLMProvider {
             this.fallbackClient = new OpenAI({
                 apiKey: config.openRouterApiKey,
                 baseURL: 'https://openrouter.ai/api/v1',
+            });
+        }
+
+        if (config.mistralApiKey && config.mistralApiKey !== '') {
+            this.mistralClient = new OpenAI({
+                apiKey: config.mistralApiKey,
+                baseURL: 'https://api.mistral.ai/v1',
             });
         }
     }
@@ -116,8 +124,23 @@ class LLMProvider {
             }
         }
 
-        const activeClient = useFallback ? this.fallbackClient : (this.groqClient || this.fallbackClient);
-        const model = useFallback ? config.openRouterModel : 'llama-3.3-70b-versatile';
+        // Fallback Chain: Mistral -> Groq -> OpenRouter
+        const activeClient = this.mistralClient || this.groqClient || this.fallbackClient;
+        const model = this.mistralClient ? 'mistral-large-latest' : (this.groqClient ? 'llama-3.3-70b-versatile' : config.openRouterModel);
+
+        if (useFallback) {
+            // If explicit fallback requested, use OpenRouter directly
+            const finalClient = this.fallbackClient || activeClient;
+            if (!finalClient) throw new Error('No valid API keys configured.');
+
+            return await finalClient.chat.completions.create({
+                model: this.fallbackClient ? config.openRouterModel : model,
+                messages: messages,
+                // @ts-ignore
+                tools: overrideTools || allTools,
+                temperature: 0.7,
+            });
+        }
 
         if (!activeClient) {
             throw new Error('No valid API keys configured.');
@@ -133,11 +156,8 @@ class LLMProvider {
             });
             return response;
         } catch (error: any) {
-            if (!useFallback && this.fallbackClient) {
-                console.warn('Primary model failed, falling back to OpenRouter...', error.message);
-                return this.createChatCompletion(messages, overrideTools, true);
-            }
-            throw error;
+            console.warn(`Primary model (${model}) failed, falling back to OpenRouter...`, error.message);
+            return this.createChatCompletion(messages, overrideTools, true);
         }
     }
 
