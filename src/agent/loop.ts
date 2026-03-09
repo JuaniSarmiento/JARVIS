@@ -20,15 +20,18 @@ Integrated features:
 - Self-Improvement: Use 'install_skill' to add new capabilities to yourself.
 - Automation Center: Integrates with n8n via webhooks for complex flows.
 
-Always prioritize security and verify critical actions with the user before executing. If a task is complex, delegate it to the appropriate subagent.`;
+Always prioritize efficiency. If a complex plan is provided, BEGIN EXECUTION IMMEDIATELY using the 'delegate_to_agent' tool. Do not just acknowledge the plan; start it. 
+
+Military rule: Mission first. If the user gives a clear multi-step command, execute all steps until the final result is ready or you need user input for a critical decision. Verifying 'critical actions' means things like deleting large data or high-cost transactions, NOT standard project creation.`;
 
 
 export class AgentLoop {
-    private MAX_ITERATIONS = 5;
+    private MAX_ITERATIONS = 15;
 
     constructor() { }
 
     async run(userId: string, userMessage: string): Promise<string> {
+        console.log(`[UserId: ${userId}] Mensaje recibido: "${userMessage.substring(0, 100)}${userMessage.length > 100 ? '...' : ''}"`);
         // Save user message to Firebase
         await memoryDb.addMessage(userId, { role: 'user', content: userMessage });
 
@@ -48,9 +51,14 @@ export class AgentLoop {
             const allTools = [...coreTools, ...mcpTools];
             const toolsPayload = allTools.length > 0 ? allTools : undefined;
 
+            console.log(`[UserId: ${userId}] [Iteración ${iterations}] Consultando a Jarvis Orchestrator...`);
             const response = await llmProvider.createChatCompletion(messages, toolsPayload);
             const choice = response.choices[0];
             const responseMessage = choice.message;
+
+            if (responseMessage.content) {
+                console.log(`[UserId: ${userId}] Jarvis dice: "${responseMessage.content.substring(0, 100)}${responseMessage.content.length > 100 ? '...' : ''}"`);
+            }
 
             // Sanitize assistant response for future LLM calls (remove reasoning_details and other non-standard fields)
             const cleanAssistantMessage: any = {

@@ -51,7 +51,9 @@ export class SubAgent {
                 continue;
             }
 
-            return responseMessage.content || "Tarea completada sin reporte.";
+            const finalResponse = responseMessage.content || "Tarea completada sin reporte.";
+            console.log(`[SubAgent: ${this.config.name}] Tarea finalizada.`);
+            return finalResponse;
         }
 
         return `El subagente ${this.config.name} no pudo resolver la tarea tras ${this.MAX_ITERATIONS} pasos.`;
