@@ -1,15 +1,14 @@
 import { Queue, Worker, Job } from 'bullmq';
-import IORedis from 'ioredis';
 import { agentLoop } from '../agent/loop.js';
 import { bot } from '../bot/telegram.js';
 
-const connection = new IORedis({
+const redisOptions = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379'),
     maxRetriesPerRequest: null,
-});
+};
 
-export const agentQueue = new Queue('jarvis-tasks', { connection });
+export const agentQueue = new Queue('jarvis-tasks', { connection: redisOptions });
 
 export const startWorker = () => {
     const worker = new Worker('jarvis-tasks', async (job: Job) => {
@@ -29,7 +28,7 @@ export const startWorker = () => {
             console.error(`[Worker Error] Tarea fallida: ${error.message}`);
             await bot.api.sendMessage(userId, `❌ **Error en la tarea en segundo plano**:\n\n${error.message}\n\nRevisá los logs para más detalles.`);
         }
-    }, { connection });
+    }, { connection: redisOptions });
 
     worker.on('completed', job => {
         console.log(`[Worker] Tarea ${job.id} completada con éxito.`);
