@@ -36,17 +36,17 @@ Be concise, surgical, and strategic. Your memory is limited; distill information
 `;
 
 const PLANNING_PROMPT = `Genera un Grafo Acíclico Dirigido (DAG) de la misión o una respuesta directa si la consulta es simple (saludos, charlas sencillas).
-Si es charla directa y NO requieres sub-agentes, responde ÚNICAMENTE con:
+Si es charla directa y NO requiere leer URLs, buscar en la web, ni usar herramientas, responde ÚNICAMENTE con:
 {
   "direct_response": "Tu respuesta directa para el usuario..."
 }
 
-Si la tarea es compleja y requiere delegar en sub-agentes, responde ÚNICAMENTE con:
+Si la tarea es compleja, o si el usuario te envía un link web (URL) para analizar, responde ÚNICAMENTE con:
 {
   "mission_goal": "...",
   "plan": [
-    { "id": "step1", "description": "...", "dependsOn": [], "agent": "coder", "task": "..." },
-    { "id": "step2", "description": "...", "dependsOn": ["step1"], "agent": "qa", "task": "..." }
+    { "id": "step1", "description": "...", "dependsOn": [], "agent": "research", "task": "..." },
+    { "id": "step2", "description": "...", "dependsOn": ["step1"], "agent": "coder", "task": "..." }
   ]
 }
 ⚠️ MUY IMPORTANTE: Los únicos valores válidos para "agent" son: "coder", "doc", "qa", "deploy", "health", "sports", "research". NUNCA inventes un agente que no esté en esta lista.
