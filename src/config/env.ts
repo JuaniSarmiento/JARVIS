@@ -13,6 +13,8 @@ export const config = {
     ghToken: process.env.GH_TOKEN || '',
     googleAiApiKey: process.env.GEMINI_API_KEY || '',
     mistralApiKey: process.env.MISTRAL_API_KEY || '',
+    copilotApiKey: process.env.COPILOT_API_KEY || '',
+    copilotApiUrl: process.env.COPILOT_API_URL || 'http://127.0.0.1:4141/v1',
     maxIterations: parseInt(process.env.MAX_ITERATIONS || '15', 10),
     maxContextTokens: parseInt(process.env.MAX_CONTEXT_TOKENS || '60000', 10),
 };

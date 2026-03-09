@@ -29,6 +29,7 @@ class LLMProvider {
     private groqClient: OpenAI | null = null;
     private fallbackClient: OpenAI | null = null;
     private mistralClient: OpenAI | null = null;
+    private copilotClient: OpenAI | null = null;
     private geminiClient: GoogleGenerativeAI | null = null;
 
     constructor() {
@@ -54,6 +55,14 @@ class LLMProvider {
             this.mistralClient = new OpenAI({
                 apiKey: config.mistralApiKey,
                 baseURL: 'https://api.mistral.ai/v1',
+            });
+        }
+
+        // Copilot Proxy Local (npx copilot-api)
+        if (config.copilotApiUrl && config.copilotApiUrl !== '') {
+            this.copilotClient = new OpenAI({
+                apiKey: config.copilotApiKey || 'dummy-token', // Copilot proxy no siempre requiere API key válida desde la SDK si ya está logeado, o le pasas el token.
+                baseURL: config.copilotApiUrl,
             });
         }
     }
@@ -188,8 +197,9 @@ class LLMProvider {
             }
         }
 
-        // --- 2. ENJAMBRE DE RESPALDO (MISTRAL -> GROQ -> OPENROUTER) ---
+        // --- 2. ENJAMBRE DE RESPALDO (COPILOT -> MISTRAL -> GROQ -> OPENROUTER) ---
         const fallbacks = [
+            { client: this.copilotClient, model: 'gpt-4o', name: 'GitHub Copilot Pro' },
             { client: this.mistralClient, model: 'mistral-large-latest', name: 'Mistral' },
             { client: this.groqClient, model: 'llama-3.3-70b-versatile', name: 'Groq (Llama)' },
             { client: this.fallbackClient, model: config.openRouterModel, name: 'OpenRouter' }
