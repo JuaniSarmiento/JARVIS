@@ -10,6 +10,7 @@ export const config = {
     dbPath: process.env.DB_PATH || './memory.db',
     googleCredentials: process.env.GOOGLE_APPLICATION_CREDENTIALS || './service-account.json',
     tavilyApiKey: process.env.TAVILY_API_KEY || '',
+    ghToken: process.env.GH_TOKEN || '',
 };
 
 // Validate critical env variables

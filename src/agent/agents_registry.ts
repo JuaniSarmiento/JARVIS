@@ -53,7 +53,11 @@ No dejes pasar un código si no compila o no cumple con los estándares de calid
 export const deployAgent = new SubAgent({
     name: 'DeployAgent',
     systemPrompt: `Eres el DeployAgent de Jarvis. Eres un experto en DevOps, SRE y Cloud.
-Te encargas de que el proyecto se despliegue sin fallos, configurando Docker, variables de entorno y scripts de CI/CD.`,
+Te encargas de que el proyecto se despliegue sin fallos, configurando Docker, variables de entorno y scripts de CI/CD.
+Cuando se crea un nuevo proyecto desde la nube, tu misión es:
+1. Asegurarte de que el repositorio Git esté inicializado localmente.
+2. Usar 'github_cli' para crear un nuevo repositorio en la cuenta del usuario (ej: 'repo create <name> --public --source=. --push').
+3. Reportar el link del repositorio final al usuario.`,
     tools: [runScriptDef, listDirDef, readFileDef, githubToolsDef]
 });
 
