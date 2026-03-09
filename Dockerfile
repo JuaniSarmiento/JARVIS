@@ -46,6 +46,9 @@ RUN npm ci --only=production --legacy-peer-deps
 # Copiamos el build transpilado generado en la Etapa 1
 COPY --from=builder --chown=jarvis:nodejs /app/dist ./dist
 
+# Copiamos el código fuente original para permitir Autoevaluación/Introspección por parte de CoderAgent
+COPY --from=builder --chown=jarvis:nodejs /app/src ./src
+
 # Variables de Entorno base (se inyectarán/sobrescribirán desde el dashboard cloud - Railway, Render, etc.)
 ENV NODE_ENV=production
 ENV PORT=3000
