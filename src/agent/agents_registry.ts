@@ -34,8 +34,20 @@ export const workspaceAgent = new SubAgent({
     tools: [gogToolsDef]
 });
 
+// 4. AGENTE CONSULTOR (ConsultantAgent)
+// Especialista en documentación profesional, propuestas comerciales y estrategia.
+export const consultantAgent = new SubAgent({
+    name: 'ConsultantAgent',
+    systemPrompt: `Eres el Agente Consultor de Juani. Tu especialidad es crear documentación de alto nivel para clientes.
+Tu tono es profesional, persuasivo y estructurado. Sabes cómo vender una idea técnica a perfiles de negocio.
+Siempre incluyes secciones de valor agregado, análisis de retorno de inversión y cronogramas claros.`,
+    tools: [writeFileDef, readFileDef, searchWebDef]
+});
+
 export const agentsRegistry: Record<string, SubAgent> = {
     'dev': devAgent,
     'research': researchAgent,
-    'workspace': workspaceAgent
+    'workspace': workspaceAgent,
+    'consultant': consultantAgent
 };
+
