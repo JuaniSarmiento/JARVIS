@@ -12,7 +12,7 @@ async function main() {
     try {
         if (process.env.GH_TOKEN && process.env.GH_TOKEN !== '') {
             console.log('🚀 Localizado GH_TOKEN. Lanzando Copilot Proxy integrado (npx copilot-api)...');
-            copilotProxy = spawn('npx', ['copilot-api', 'start', '--port', '4141'], {
+            copilotProxy = spawn('npx', ['copilot-api', 'start', '--port', '4141', '--github-token', process.env.GH_TOKEN], {
                 shell: true,
                 stdio: 'pipe' // Para no ensuciar excesivamente los logs, aunque podemos hacerlo inherit
             });
