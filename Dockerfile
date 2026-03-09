@@ -40,6 +40,9 @@ COPY --from=builder --chown=jarvis:nodejs /app/package-lock.json* ./
 # Instalamos SOLAMENTE dependencias de producción (redactando peso de la imagen)
 RUN npm ci --only=production --legacy-peer-deps
 
+# Instalamos el driver de Copilot-api a nivel del contenedor (Para ser ejecutado vía npx por NodeJS)
+RUN npm install -g copilot-api@latest
+
 # Copiamos el build transpilado generado en la Etapa 1
 COPY --from=builder --chown=jarvis:nodejs /app/dist ./dist
 
