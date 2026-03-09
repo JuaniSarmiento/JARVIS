@@ -33,7 +33,7 @@ export async function executeSearchWeb(args: any): Promise<string> {
         const topResults = searchResults.results.slice(0, 5);
         let resultString = `Resultados de búsqueda para "${query}":\n\n`;
 
-        topResults.forEach((res, index) => {
+        topResults.forEach((res: any, index: number) => {
             resultString += `${index + 1}. **${res.title}**\n`;
             resultString += `   URL: ${res.url}\n`;
             resultString += `   Descripción: ${res.description}\n\n`;

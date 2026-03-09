@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 import { agentLoop } from './agent/loop.js';
 
@@ -9,7 +9,7 @@ export function startServer() {
     app.use(bodyParser.json());
 
     // Endpoint genérico para recibir webhooks o peticiones de n8n
-    app.post('/webhook', async (req, res) => {
+    app.post('/webhook', async (req: Request, res: Response) => {
         const { userId, message, context } = req.body;
 
         if (!userId || !message) {

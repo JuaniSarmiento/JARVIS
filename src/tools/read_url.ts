@@ -48,7 +48,7 @@ export async function executeReadUrl(args: any): Promise<string> {
         const contentContainer = $('article').length ? $('article') : ($('main').length ? $('main') : $('body'));
 
         // Extraer encabezados y párrafos
-        contentContainer.find('h1, h2, h3, p, li').each((_, el) => {
+        contentContainer.find('h1, h2, h3, p, li').each((_index, el: any) => {
             const tagName = el.tagName.toLowerCase();
             const text = $(el).text().trim().replace(/\\s+/g, ' '); // Limpiar múltiples espacios
 

@@ -25,7 +25,7 @@ export class SubAgent {
             iterations++;
 
             // Usamos llmProvider para la inferencia, pasando las herramientas específicas del subagente
-            const response = await llmProvider.createChatCompletion(messages, false, this.config.tools);
+            const response = await llmProvider.createChatCompletion(messages, this.config.tools, false);
             const responseMessage = response.choices[0].message;
             messages.push(responseMessage);
 
