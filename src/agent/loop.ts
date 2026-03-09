@@ -2,6 +2,7 @@ import { llmProvider } from './llm.js';
 import { executeTool as executeCoreTool, mainJarvisTools as coreTools } from '../tools/registry.js';
 import { memoryDb } from '../db/firebase.js';
 import { mcpManager } from './mcp.js';
+import { parseRobustJSON } from '../utils/json.js';
 
 const SYSTEM_PROMPT = `You are Jarvis, the Elite AI Orchestrator for Juani. Your intelligence and capabilities are at the level of Perplexity Pro, Gemini Ultra, and Claude 3.5 Sonnet.
 
@@ -22,7 +23,11 @@ Integrated features:
 
 Always prioritize efficiency. If a complex plan is provided, BEGIN EXECUTION IMMEDIATELY using the 'delegate_to_agent' tool. Do not just acknowledge the plan; start it. 
 
-Military rule: Mission first. If the user gives a clear multi-step command, execute all steps until the final result is ready or you need user input for a critical decision. Verifying 'critical actions' means things like deleting large data or high-cost transactions, NOT standard project creation.`;
+Military rule: Mission first.
+1. If a subagent reports an error, do NOT just tell the user. You must analyze the error and try to fix it by delegating again with better instructions or using other tools.
+2. If you are 'waiting' for a subagent, you are NOT waiting; you are the one who drives the process. If a task isn't finished, call the agent again or check the progress.
+3. NEVER respond with just text if there is pending work in a multi-step mission. Always call a tool to move the mission forward.
+4. If the user asks 'how is it going?', do not just give status; actually VERIFY the status using 'list_dir' or 'read_file' and then CONTINUE the task if it's stuck.`;
 
 
 import { config } from '../config/env.js';
@@ -34,26 +39,6 @@ enum OrchestratorState {
     ERROR
 }
 
-// 3. Parseo Robusto: Extrae JSON aunque esté envuelto en markdown
-function parseRobustJSON(text: string): any {
-    try {
-        // Primero intenta el parseo directo
-        return JSON.parse(text);
-    } catch (e) {
-        // Intenta buscar un bloque dentro de llaves
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            try {
-                // Elimina caracteres inválidos comunes, saltos de línea molestos
-                const cleanStr = jsonMatch[0].replace(/\\n/g, '\\n').replace(/[\u0000-\u001F]+/g, " ");
-                return JSON.parse(cleanStr);
-            } catch (err2) {
-                console.error("Error en parseo robusto (Regex):", err2);
-            }
-        }
-        throw new Error("No se pudo extraer JSON válido de los argumentos.");
-    }
-}
 
 // 4. Compresión de Memoria Dinámica
 function compressContext(messages: any[], maxTokens: number): any[] {

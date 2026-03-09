@@ -1,5 +1,6 @@
 import { llmProvider } from './llm.js';
 import { executeTool } from '../tools/registry.js';
+import { parseRobustJSON } from '../utils/json.js';
 
 export interface SubAgentConfig {
     name: string;
@@ -8,7 +9,7 @@ export interface SubAgentConfig {
 }
 
 export class SubAgent {
-    private MAX_ITERATIONS = 10;
+    private MAX_ITERATIONS = 15; // Aumentado para tareas complejas como Coding
 
     constructor(private config: SubAgentConfig) { }
 
@@ -22,13 +23,12 @@ export class SubAgent {
 
         let iterations = 0;
         while (iterations < this.MAX_ITERATIONS) {
-            // Trim messages if they grow too large to save tokens (keep system + initial user + last 10)
-            if (messages.length > 15) {
-                messages = [messages[0], messages[1], ...messages.slice(-10)];
+            // Trim messages if they grow too large to save tokens (keep system + initial user + last 12)
+            if (messages.length > 20) {
+                messages = [messages[0], messages[1], ...messages.slice(-12)];
             }
             iterations++;
 
-            // Usamos llmProvider para la inferencia, pasando las herramientas específicas del subagente
             const response = await llmProvider.createChatCompletion(messages, this.config.tools, false);
             const responseMessage = response.choices[0].message;
             messages.push(responseMessage);
@@ -36,10 +36,18 @@ export class SubAgent {
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
                 for (const toolCall of responseMessage.tool_calls) {
                     const functionName = toolCall.function.name;
-                    const functionArgs = JSON.parse(toolCall.function.arguments);
+                    let functionArgs: any = {};
+                    let functionResponse: string;
 
-                    console.log(`[SubAgent: ${this.config.name}] Herramienta: ${functionName}`);
-                    const functionResponse = await executeTool(functionName, functionArgs);
+                    try {
+                        functionArgs = parseRobustJSON(toolCall.function.arguments);
+                        console.log(`[SubAgent: ${this.config.name}] Herramienta: ${functionName}`);
+                        functionResponse = await executeTool(functionName, functionArgs);
+                    } catch (error: any) {
+                        console.error(`[SubAgent Error] ${this.config.name} falló en ${functionName}:`, error.message);
+                        // Reportamos el error al subagente para que intente corregirlo
+                        functionResponse = `ERROR: No se pudo ejecutar la herramienta (${error.message}). Por favor, verifica los argumentos y vuelve a intentarlo con el formato correcto.`;
+                    }
 
                     messages.push({
                         role: 'tool',
