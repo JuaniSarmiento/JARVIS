@@ -4,13 +4,13 @@ import { z } from 'zod';
 
 /**
  * Entorno de Sandbox para el sistema de archivos.
- * Restringe todas las operaciones al directorio './workspace'.
+ * Permite acceso de lectura/escritura a la raíz del proyecto para uso de CI/CD.
  */
-const BASE_WORKSPACE_PATH = path.resolve(process.cwd(), './workspace');
+const BASE_WORKSPACE_PATH = path.resolve(process.cwd());
 
 /**
- * Verifica si una ruta es segura (está dentro del sandbox del workspace).
- * Previene ataques de Path Traversal.
+ * Verifica si una ruta es segura (está dentro del proyecto).
+ * Previene ataques de Path Traversal apuntando a /etc u otras locaciones de OS.
  */
 export function isSafePath(requestedPath: string): { safe: boolean; fullPath: string } {
     const normalizedPath = path.normalize(requestedPath);
