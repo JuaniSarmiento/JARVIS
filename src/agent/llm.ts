@@ -36,7 +36,7 @@ class LLMProvider {
                 const functionDeclarations = toolsList.map((t: any) => ({
                     name: t.function.name,
                     description: t.function.description,
-                    parameters: t.function.parameters,
+                    parameters: sanitizeSchema(t.function.parameters),
                 }));
 
                 const model = this.geminiClient.getGenerativeModel({
@@ -147,6 +147,27 @@ class LLMProvider {
             throw error;
         }
     }
+}
+
+// Helper to sanitize JSON schema for Gemini (removes unsupported fields like additionalProperties)
+function sanitizeSchema(schema: any): any {
+    if (!schema || typeof schema !== 'object') return schema;
+
+    const newSchema = { ...schema };
+    delete newSchema.additionalProperties;
+    delete newSchema.$schema;
+
+    if (newSchema.properties) {
+        for (const key in newSchema.properties) {
+            newSchema.properties[key] = sanitizeSchema(newSchema.properties[key]);
+        }
+    }
+
+    if (newSchema.items) {
+        newSchema.items = sanitizeSchema(newSchema.items);
+    }
+
+    return newSchema;
 }
 
 export const llmProvider = new LLMProvider();
