@@ -68,7 +68,29 @@ class LLMProvider {
     }
 
     async createChatCompletion(messages: any[], overrideTools?: any[]): Promise<any> {
-        // --- 1. INTENTO PRIMARIO: GEMINI (Refactorizado con Function Calling Nativo) ---
+        // --- 1. INTENTO PRIMARIO: COPILOT PRO (GPT-4o) ---
+        if (this.copilotClient) {
+            try {
+                return await withRetry(async () => {
+                    console.log(`📡 Intentando con GitHub Copilot Pro (gpt-4o)...`);
+                    const toolsList = overrideTools || allTools;
+                    const completionConfig: any = {
+                        model: 'gpt-4o',
+                        messages: messages,
+                        tools: toolsList.map((t: any) => ({ ...t, strict: true })),
+                        temperature: 0.7,
+                    };
+
+                    const response = await this.copilotClient!.chat.completions.create(completionConfig);
+                    console.log(`✅ Respuesta obtenida de GitHub Copilot Pro`);
+                    return response;
+                });
+            } catch (error: any) {
+                console.warn(`⚠️ Copilot Pro falló tras reintentos (${error.message}). Cayendo a Gemini...`);
+            }
+        }
+
+        // --- 2. INTENTO SECUNDARIO: GEMINI (Refactorizado con Function Calling Nativo) ---
         if (this.geminiClient) {
             try {
                 return await withRetry(async () => {
@@ -197,9 +219,8 @@ class LLMProvider {
             }
         }
 
-        // --- 2. ENJAMBRE DE RESPALDO (COPILOT -> MISTRAL -> GROQ -> OPENROUTER) ---
+        // --- 3. ENJAMBRE DE RESPALDO (MISTRAL -> GROQ -> OPENROUTER) ---
         const fallbacks = [
-            { client: this.copilotClient, model: 'gpt-4o', name: 'GitHub Copilot Pro' },
             { client: this.mistralClient, model: 'mistral-large-latest', name: 'Mistral' },
             { client: this.groqClient, model: 'llama-3.3-70b-versatile', name: 'Groq (Llama)' },
             { client: this.fallbackClient, model: config.openRouterModel, name: 'OpenRouter' }
