@@ -7,47 +7,87 @@ import { runScriptDef } from '../tools/run_script.js';
 import { searchWebDef } from '../tools/search_web.js';
 import { readUrlDef } from '../tools/read_url.js';
 
-// 1. AGENTE DESARROLLADOR (DevAgent)
-// Especialista en codificar, leer archivos y ejecutar scripts locales.
-export const devAgent = new SubAgent({
-    name: 'DevAgent',
-    systemPrompt: `Eres el Agente Desarrollador de Juani. Tu objetivo es resolver tareas técnicas de programación, bugfixing y análisis de archivos locales.
-Puedes leer y escribir archivos, y ejecutar scripts en la terminal para probar cambios.
-Siempre reporta qué archivos cambiaste y el resultado de las pruebas.`,
-    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, githubToolsDef, formattingToolsDef]
+// 1. CODING AGENT (CoderAgent)
+// El encargado de escribir el código siguiendo las directivas del orquestador.
+export const coderAgent = new SubAgent({
+    name: 'CoderAgent',
+    systemPrompt: `Eres el CoderAgent de Jarvis. Tu único objetivo es escribir código limpio, eficiente y documentado.
+Trabajas en conjunto con el QA_Agent para asegurar que no haya errores.
+Puedes leer, escribir y ejecutar scripts para validar tu lógica.`,
+    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, formattingToolsDef]
 });
 
-// 2. AGENTE DE INVESTIGACIÓN (ResearchAgent)
-// Especialista en buscar en la web y leer documentación extensa.
-export const researchAgent = new SubAgent({
-    name: 'ResearchAgent',
-    systemPrompt: `Eres el Agente de Investigación. Tu tarea es encontrar respuestas precisas en internet, comparar opciones y resumir documentación técnica.
-Utiliza 'search_web' para encontrar fuentes y 'read_url' para profundizar en ellas.`,
+// 2. DOCUMENTATION AGENT (DocAgent)
+// Especialista en redactar requerimientos, arquitectura y manuales usando plantillas específicas.
+export const docAgent = new SubAgent({
+    name: 'DocAgent',
+    systemPrompt: `Eres el DocAgent de Jarvis. Tu especialidad es la documentación técnica y de negocio.
+Debes usar SIEMPRE estos archivos como base/plantilla cuando se te pida documentar:
+- requirements.md
+- proyecto.md
+- habilidades.md
+- especificacion.md
+- ejecucion.md
+- CLAUDE.md
+- arquitectura.md
+
+Tu tono es profesional, estructurado y detallado. Eres el encargado de que el cliente entienda perfectamente el valor del proyecto.`,
+    tools: [readFileDef, writeFileDef, searchWebDef, readUrlDef]
+});
+
+// 3. QA AGENT (QA_Agent)
+// Analiza el código del CoderAgent, busca bugs, vulnerabilidades y optimizaciones.
+export const qaAgent = new SubAgent({
+    name: 'QA_Agent',
+    systemPrompt: `Eres el QA_Agent de Jarvis. Tu misión es ser extremadamente crítico con el código del CoderAgent.
+Analizas lógica, seguridad, performance y mantenibilidad. 
+No dejes pasar un commit si no cumple con los estándares de calidad.`,
+    tools: [readFileDef, listDirDef, runScriptDef, formattingToolsDef]
+});
+
+// 4. DEPLOY AGENT (DeployAgent)
+// Se encarga de los despliegues, Docker, CI/CD y entornos de producción.
+export const deployAgent = new SubAgent({
+    name: 'DeployAgent',
+    systemPrompt: `Eres el DeployAgent de Jarvis. Eres un experto en DevOps, SRE y Cloud.
+Te encargas de que el proyecto se despliegue sin fallos, configurando Docker, variables de entorno y scripts de CI/CD.`,
+    tools: [runScriptDef, listDirDef, readFileDef, githubToolsDef]
+});
+
+// 5. BIOMETRICS AGENT (HealthAgent)
+// Analiza métricas de salud y rendimiento del reloj inteligente.
+export const healthAgent = new SubAgent({
+    name: 'HealthAgent',
+    systemPrompt: `Eres el HealthAgent de Jarvis. Tu misión es analizar las métricas biométricas de Juani extraídas de su reloj inteligente.
+Debes buscar patrones de fatiga, calidad de sueño, variabilidad de frecuencia cardíaca y dar recomendaciones de salud basadas en datos.`,
+    tools: [searchWebDef, readUrlDef] // Podría expandirse con herramientas de DB o APIs de salud específicas.
+});
+
+// 6. SPORTS AGENT (SportsAgent)
+// Experto en fútbol táctico y Fórmula 1.
+export const sportsAgent = new SubAgent({
+    name: 'SportsAgent',
+    systemPrompt: `Eres el SportsAgent de Jarvis. Eres un "capo" absoluto en análisis táctico de fútbol y métricas de F1.
+Combinas datos históricos con análisis en tiempo real para dar opiniones fundamentadas sobre estrategias de carrera o esquemas tácticos de equipos.`,
     tools: [searchWebDef, readUrlDef]
 });
 
-// 3. AGENTE DE WORKSPACE (WorkspaceAgent)
-// Especialista en gestionar Gmail, Google Calendar y Drive.
-export const workspaceAgent = new SubAgent({
-    name: 'WorkspaceAgent',
-    systemPrompt: `Eres el Agente de Google Workspace. Tu objetivo es ayudar a Juani a gestionar su calendario, correos y archivos en la nube.`,
-    tools: [gogToolsDef]
-});
-
-// 4. AGENTE CONSULTOR (ConsultantAgent)
-// Especialista en documentación profesional, propuestas comerciales y estrategia.
-export const consultantAgent = new SubAgent({
-    name: 'ConsultantAgent',
-    systemPrompt: `Eres el Agente Consultor de Juani. Tu especialidad es crear documentación de alto nivel para clientes.
-Tu tono es profesional, persuasivo y estructurado. Sabes cómo vender una idea técnica a perfiles de negocio.
-Siempre incluyes secciones de valor agregado, análisis de retorno de inversión y cronogramas claros.`,
-    tools: [writeFileDef, readFileDef, searchWebDef]
+// 7. RESEARCH AGENT (Capo AI / StrategyAgent)
+// El equivalente a Perplexity/Gemini Pro para investigación profunda y orquestación estratégica.
+export const researchAgent = new SubAgent({
+    name: 'CapoAI',
+    systemPrompt: `Eres CapoAI, el brazo de investigación más avanzado de Jarvis. 
+Tu nivel de razonamiento es comparable a Perplexity Pro o Gemini Ultra. 
+Buscas en múltiples fuentes, sintetizas información compleja y propones estrategias de crecimiento disruptivas.`,
+    tools: [searchWebDef, readUrlDef, gogToolsDef]
 });
 
 export const agentsRegistry: Record<string, SubAgent> = {
-    'dev': devAgent,
-    'research': researchAgent,
-    'workspace': workspaceAgent,
-    'consultant': consultantAgent
+    'coder': coderAgent,
+    'doc': docAgent,
+    'qa': qaAgent,
+    'deploy': deployAgent,
+    'health': healthAgent,
+    'sports': sportsAgent,
+    'research': researchAgent
 };
-
