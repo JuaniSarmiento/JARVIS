@@ -36,10 +36,10 @@ class LLMProvider {
         }
     }
 
-    async createChatCompletion(messages: any[], overrideTools?: any[], useFallback = false): Promise<any> {
-        if (!useFallback && this.geminiClient) {
+    async createChatCompletion(messages: any[], overrideTools?: any[]): Promise<any> {
+        // --- 1. INTENTO PRIMARIO: GEMINI ---
+        if (this.geminiClient) {
             try {
-                // Determine tools to use and convert to Gemini format
                 const toolsList = overrideTools || allTools;
                 const functionDeclarations = toolsList.map((t: any) => ({
                     name: t.function.name,
@@ -48,11 +48,10 @@ class LLMProvider {
                 }));
 
                 const model = this.geminiClient.getGenerativeModel({
-                    model: 'models/gemini-2.5-flash',
+                    model: 'models/gemini-2.0-flash',
                     tools: functionDeclarations.length > 0 ? [{ functionDeclarations }] : [],
                 });
 
-                // Gemini strictly requires the first message in history to be from 'user'.
                 const nonSystemMessages = messages.filter(m => m.role !== 'system');
                 const firstUserIdx = nonSystemMessages.findIndex(m => m.role === 'user');
 
@@ -79,7 +78,6 @@ class LLMProvider {
                     });
                     lastMessageContent = nonSystemMessages[nonSystemMessages.length - 1].content || '';
                 } else {
-                    // Fallback: If no user message at all, just use the last one.
                     lastMessageContent = messages[messages.length - 1].content || '';
                 }
 
@@ -102,7 +100,7 @@ class LLMProvider {
                 };
 
                 if (callPart?.functionCall) {
-                    console.log(`[UserId: Gemini] Tool Call detected: ${callPart.functionCall.name}`);
+                    console.log(`[LLM: Gemini] Tool Call: ${callPart.functionCall.name}`);
                     responseMsg.tool_calls = [{
                         id: `call_${Date.now()}`,
                         type: 'function',
@@ -113,58 +111,47 @@ class LLMProvider {
                     }];
                 }
 
-                return {
-                    choices: [{
-                        message: responseMsg
-                    }]
-                };
+                return { choices: [{ message: responseMsg }] };
             } catch (error: any) {
-                const errorStr = error instanceof Error ? error.message : String(error);
-                if (errorStr.includes('429') || errorStr.includes('Quota') || errorStr.includes('Too Many Requests')) {
-                    const waitTime = 45000;
-                    console.warn(`[429] Límite de cuota en Gemini. Enfriando motores por ${waitTime / 1000}s...`);
-                    // Dormir el hilo para respetar el backoff
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    return this.createChatCompletion(messages, overrideTools, false);
-                }
-                console.warn('Gemini Native failed, falling back to Groq...', errorStr);
-                return this.createChatCompletion(messages, overrideTools, true);
+                console.warn(`⚠️ Gemini falló (${error.message || error}). Intentando enjambre de respaldo...`);
             }
         }
 
-        // Fallback Chain: Mistral -> Groq -> OpenRouter (with STRICT JSON MODE)
-        const activeClient = this.mistralClient || this.groqClient || this.fallbackClient;
-        const model = this.mistralClient ? 'mistral-large-latest' : (this.groqClient ? 'llama-3.3-70b-versatile' : config.openRouterModel);
+        // --- 2. ENJAMBRE DE RESPALDO (MISTRAL -> GROQ -> OPENROUTER) ---
+        const fallbacks = [
+            { client: this.mistralClient, model: 'mistral-large-latest', name: 'Mistral' },
+            { client: this.groqClient, model: 'llama-3.3-70b-versatile', name: 'Groq (Llama)' },
+            { client: this.fallbackClient, model: config.openRouterModel, name: 'OpenRouter' }
+        ].filter(f => f.client !== null);
 
-        if (!activeClient) {
-            throw new Error('No valid API keys configured.');
-        }
+        for (const fallback of fallbacks) {
+            try {
+                console.log(`📡 Intentando con ${fallback.name} (${fallback.model})...`);
 
-        // Prep tools with strict: true if supported (OpenAI-compatible)
-        const toolsList = overrideTools || allTools;
-        const strictTools = toolsList.map((t: any) => ({
-            ...t,
-            strict: true // Enforce structured outputs where supported
-        }));
+                const toolsList = overrideTools || allTools;
+                const strictTools = toolsList.map((t: any) => ({
+                    ...t,
+                    strict: true
+                }));
 
-        const completionConfig: any = {
-            model: useFallback ? (this.fallbackClient ? config.openRouterModel : model) : model,
-            messages: messages,
-            tools: strictTools,
-            temperature: 0.7,
-            response_format: { type: "json_object" } // Force JSON output for fallbacks
-        };
+                const completionConfig: any = {
+                    model: fallback.model,
+                    messages: messages,
+                    tools: strictTools,
+                    temperature: 0.7,
+                    response_format: { type: "json_object" }
+                };
 
-        try {
-            const response = await activeClient.chat.completions.create(completionConfig);
-            return response;
-        } catch (error: any) {
-            if (!useFallback) {
-                console.warn(`Primary fallback model (${model}) failed, attempting OpenRouter...`, error.message);
-                return this.createChatCompletion(messages, overrideTools, true);
+                const response = await fallback.client!.chat.completions.create(completionConfig);
+                console.log(`✅ Respuesta obtenida de ${fallback.name}`);
+                return response;
+            } catch (error: any) {
+                console.warn(`❌ ${fallback.name} falló: ${error.message}`);
+                // Continúa al siguiente en el loop
             }
-            throw error;
         }
+
+        throw new Error('Lo siento Jefe, se nos cayeron todos los enjambres de IAs. Revisá las cuotas y las API Keys.');
     }
 
     async transcribeAudio(fileBuffer: Buffer, fileName: string): Promise<string> {
