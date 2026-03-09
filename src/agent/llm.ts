@@ -117,12 +117,22 @@ class LLMProvider {
                             return { role: 'model', parts };
                         }
 
-                        // Mensaje estándar del usuario
                         return {
                             role: 'user',
                             parts: [{ text: m.content || '' }]
                         };
                     });
+
+                    // Limpieza estricta para Gemini: El primer mensaje DEBE ser 'user'
+                    while (history.length > 0 && history[0].role === 'model') {
+                        console.warn("🧹 [LLM] Limpiando mensaje huérfano de 'model' al inicio del historial para que Gemini no crashee.");
+                        history.shift(); // Volamos el mensaje del modelo que quedó primero
+                    }
+
+                    // Opcional: Si por limpiar te quedaste sin mensajes (raro, pero puede pasar)
+                    if (history.length === 0) {
+                        history.push({ role: 'user', parts: [{ text: 'Continuemos.' }] });
+                    }
 
                     const lastMessage = conversationMessages[conversationMessages.length - 1];
                     const chat = model.startChat({

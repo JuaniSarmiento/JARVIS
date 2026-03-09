@@ -8,9 +8,11 @@ import { memoryDb } from '../db/firebase.js';
 async function sendLongMessage(ctx: any, text: string) {
   const MAX_LENGTH = 4000;
   if (text.length <= MAX_LENGTH) {
-    return ctx.reply(text, { parse_mode: 'Markdown' }).catch(() => {
-      ctx.reply(text);
-    });
+    try {
+      return await ctx.reply(text, { parse_mode: 'Markdown' });
+    } catch {
+      return await ctx.reply(text);
+    }
   }
 
   const chunks = [];
@@ -19,13 +21,30 @@ async function sendLongMessage(ctx: any, text: string) {
   }
 
   for (const chunk of chunks) {
-    await ctx.reply(chunk, { parse_mode: 'Markdown' }).catch(() => {
-      ctx.reply(chunk);
-    });
+    try {
+      await ctx.reply(chunk, { parse_mode: 'Markdown' });
+    } catch {
+      await ctx.reply(chunk);
+    }
   }
 }
 
 export const bot = new Bot(config.telegramBotToken);
+
+export async function safeSendMessage(chatId: string | number, text: string) {
+  try {
+    // Intento 1: Mandarlo lindo con formato
+    await bot.api.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+  } catch (error: any) {
+    console.warn("⚠️ Telegram rechazó el formato Markdown de la IA. Enviando en texto plano...");
+    try {
+      // Intento 2: Fallback brutal, texto plano puro y duro sin parse_mode
+      await bot.api.sendMessage(chatId, text);
+    } catch (fallbackError) {
+      console.error("🚨 Error fatal enviando mensaje a Telegram:", fallbackError);
+    }
+  }
+}
 
 export function startBot() {
   if (!config.telegramBotToken || config.telegramBotToken === 'SUTITUYE POR EL TUYO') {

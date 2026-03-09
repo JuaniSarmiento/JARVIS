@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 import { agentLoop } from '../agent/loop.js';
-import { bot } from '../bot/telegram.js';
+import { safeSendMessage } from '../bot/telegram.js';
 
 import { redisConnection } from '../db/redis.js';
 
@@ -18,15 +18,15 @@ export const startWorker = () => {
         try {
             // Un notifier especial que envía mensajes por Telegram a medida que avanza
             const notifier = async (msg: string) => {
-                await bot.api.sendMessage(userId, msg, { parse_mode: 'Markdown' });
+                await safeSendMessage(userId, msg);
             };
 
             const result = await agentLoop.run(userId, message, notifier, job.id);
 
-            await bot.api.sendMessage(userId, `🏁 **Tarea Completada**:\n\n${result}`, { parse_mode: 'Markdown' });
+            await safeSendMessage(userId, `🏁 **Tarea Completada**:\n\n${result}`);
         } catch (error: any) {
             console.error(`[Worker Error] Tarea fallida: ${error.message}`);
-            await bot.api.sendMessage(userId, `❌ **Error en la tarea en segundo plano**:\n\n${error.message}\n\nRevisá los logs para más detalles.`);
+            await safeSendMessage(userId, `❌ **Error en la tarea en segundo plano**:\n\n${error.message}\n\nRevisá los logs para más detalles.`);
         }
     }, { connection: redisConnection as any });
 
