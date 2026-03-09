@@ -46,27 +46,32 @@ export async function safeSendMessage(chatId: string | number, text: string) {
   }
 }
 
+import { startPersonalityScheduler, recordUserInteraction } from '../personality/proactive.js';
+
 export function startBot() {
   if (!config.telegramBotToken || config.telegramBotToken === 'SUTITUYE POR EL TUYO') {
     console.error('❌ El TELEGRAM_BOT_TOKEN no está configurado. El bot no puede arrancar.');
     return;
   }
 
-  // Security Middleware: Whitelist
+  // Security Middleware: Whitelist & Interaction Tracking
   bot.use(async (ctx, next) => {
     const userId = ctx.from?.id.toString();
     if (!userId) return; // Ignore updates without user ID
 
     if (!config.telegramAllowedUserIds.includes(userId)) {
       console.log(`[Security] Bloqueado mensaje de usuario no autorizado: ${userId}`);
-      // Opcional: ctx.reply('No estás autorizado para usar este bot.');
       return;
     }
+
+    // TRACK USER INTERACTION FOR PROACTIVE PERSONALITY
+    recordUserInteraction();
+
     await next();
   });
 
   bot.command('start', (ctx) => {
-    ctx.reply('Hola, soy Jarvis. Tu asistente de inteligencia artificial personal funcionando en local con memoria en Firebase. ¿En qué te puedo ayudar hoy?');
+    ctx.reply('Hola, soy Jarvis. Tu asistente de inteligencia artificial personal funcionando en local y la nube con memoria en Firebase. ¿En qué te puedo ayudar hoy?');
   });
 
   bot.command('clear', async (ctx) => {
@@ -75,6 +80,10 @@ export function startBot() {
       await memoryDb.clearHistory(userId);
       ctx.reply('Cerebro reseteado para esta conversación. He olvidado el contexto anterior en Firebase.');
     }
+  });
+
+  bot.command('mood', async (ctx) => {
+    ctx.reply('🎭 ¿Cómo te sentís hoy Jefe? Escribime algo como "Estoy estresado" o "Modo focus" y ajustaré mi nivel de simpatía/productividad para el resto del día.');
   });
 
   bot.command('async', async (ctx) => {
@@ -142,6 +151,9 @@ export function startBot() {
         drop_pending_updates: true,
         onStart: (botInfo) => {
           console.log(`🤖 Jarvis Telegram Bot conectado y escuchando comandos como @${botInfo.username}`);
+
+          // INICIAR PERSONALIDAD PROACTIVA (FASE 1)
+          startPersonalityScheduler();
         }
       });
     } catch (err: any) {

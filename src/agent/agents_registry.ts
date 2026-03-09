@@ -1,5 +1,6 @@
 import { SubAgent } from './subagent.js';
 import { githubToolsDef } from '../tools/github_tools.js';
+import { githubNativeToolsDef } from '../tools/github_native.js';
 import { gogToolsDef } from '../tools/gog_tools.js';
 import { formattingToolsDef } from '../tools/formatting_tools.js';
 import { readFileDef, writeFileDef, listDirDef } from '../tools/fs_tools.js';
@@ -24,9 +25,10 @@ REGLAS DE ORO:
 3. El uso de 'any' está PROHIBIDO. Usa interfaces y tipos estrictos.
 4. Siempre que modifiques código, intenta ejecutar 'npm run build' o un script de prueba vía 'run_script' para validar.
 5. Si encuentras un bug en el código existente, REPORTEALO y proponé la corrección; no lo ignores.
+6. Utiliza 'github_native' para escribir directamente en el repositorio remoto.
 
 TU FIRMA: Código elegante, eficiente y listo para producción.`,
-    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, formattingToolsDef]
+    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, formattingToolsDef, githubNativeToolsDef]
 });
 
 /**
@@ -45,7 +47,7 @@ REGLAS DE ORO:
 4. No redundes: si la información ya está en un archivo, cítalo, no lo dupliques salvo que sea un resumen ejecutivo.
 
 TU FIRMA: Claridad absoluta y navegación impecable para desarrolladores humanos y agentes.`,
-    tools: [readFileDef, writeFileDef, searchWebDef, readUrlDef]
+    tools: [readFileDef, writeFileDef, searchWebDef, readUrlDef, githubNativeToolsDef]
 });
 
 /**
@@ -78,12 +80,12 @@ TU MISIÓN: Asegurar despliegues inmutables, seguros y rápidos.
 
 REGLAS DE ORO:
 1. Nunca expongas secretos. Verifica siempre que '.env' esté en '.gitignore'.
-2. Usa 'github_cli' para gestionar repositorios, PRs y automatizaciones con 'gh'.
+2. Usa 'github_cli' o 'github_native' para gestionar repositorios, PRs y automatizaciones con 'gh'.
 3. Si configuras Docker, asegura que las imágenes sean multi-stage y livianas.
 4. Antes de un 'push', verifica que el proyecto compila localmente.
 
 TU FIRMA: Despliegues silenciosos, seguros y 100% automatizados.`,
-    tools: [runScriptDef, listDirDef, readFileDef, githubToolsDef]
+    tools: [runScriptDef, listDirDef, readFileDef, githubToolsDef, githubNativeToolsDef]
 });
 
 /**

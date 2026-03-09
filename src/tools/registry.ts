@@ -1,5 +1,6 @@
 import { getCurrentTimeDef, executeGetCurrentTime } from './get_current_time.js';
 import { githubToolsDef, executeGithubCommand } from './github_tools.js';
+import { executeGithubNative, githubNativeToolsDef } from "./github_native.js";
 import { gogToolsDef, executeGogCommand } from './gog_tools.js';
 import { formattingToolsDef, executeFormattingCommand } from './formatting_tools.js';
 import { n8nPrToolsDef, executeN8nPrCommand } from './n8n_pr_tools.js';
@@ -27,7 +28,8 @@ export const allTools = [
     runScriptDef,
     installSkillDef,
     getHealthMetricsDef,
-    getSportsDataDef
+    getSportsDataDef,
+    githubNativeToolsDef
 ];
 
 export const mainJarvisTools = [
@@ -76,7 +78,9 @@ export async function executeTool(name: string, args: any, onProgress?: (msg: st
             return await executeGetHealthMetrics(args);
         case 'get_sports_data':
             return await executeGetSportsData(args);
+        case 'github_native':
+            return await executeGithubNative(args);
         default:
-            throw new Error(`Tool ${name} not found`);
+            throw new Error(`Herramienta no encontrada: ${name}`);
     }
 }
