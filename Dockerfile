@@ -50,5 +50,5 @@ ENV PORT=3000
 # Exponemos el puerto de Express y Bull-Board
 EXPOSE 3000
 
-# Punto de entrada de la aplicación
-CMD ["npm", "start"]
+# Punto de entrada de la aplicación nativo para permitir envío correcto de procesos SIGTERM
+CMD ["node", "dist/index.js"]

@@ -136,10 +136,24 @@ export function startBot() {
     console.error(`[Error] Error al procesar actualizacion ${ctx.update.update_id}:`, err.error);
   });
 
-  bot.start({
-    drop_pending_updates: true,
-    onStart: (botInfo) => {
-      console.log(`🤖 Jarvis Telegram Bot conectado y escuchando comandos como @${botInfo.username}`);
+  const startWithRetry = async (retries = 5) => {
+    try {
+      await bot.start({
+        drop_pending_updates: true,
+        onStart: (botInfo) => {
+          console.log(`🤖 Jarvis Telegram Bot conectado y escuchando comandos como @${botInfo.username}`);
+        }
+      });
+    } catch (err: any) {
+      if (err.error_code === 409 && retries > 0) {
+        console.warn(`⚠️ [Telegram API] Error 409 Conflict. Otra instancia (viejo despliegue) sigue viva drenando Updates.`);
+        console.warn(`⏳ Reintentando conexión en 3 segundos... (Intentos restantes: ${retries})`);
+        setTimeout(() => startWithRetry(retries - 1), 3000);
+      } else {
+        console.error('❌ Error fatal (irreversible) al iniciar el bot de Telegram:', err);
+      }
     }
-  });
+  };
+
+  startWithRetry();
 }
