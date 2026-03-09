@@ -119,45 +119,51 @@ class LLMProvider {
                     }]
                 };
             } catch (error: any) {
-                console.warn('Gemini Native failed, falling back to Groq...', error.message);
+                const errorStr = error instanceof Error ? error.message : String(error);
+                if (errorStr.includes('429') || errorStr.includes('Quota') || errorStr.includes('Too Many Requests')) {
+                    const waitTime = 45000;
+                    console.warn(`[429] Límite de cuota en Gemini. Enfriando motores por ${waitTime / 1000}s...`);
+                    // Dormir el hilo para respetar el backoff
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    return this.createChatCompletion(messages, overrideTools, false);
+                }
+                console.warn('Gemini Native failed, falling back to Groq...', errorStr);
                 return this.createChatCompletion(messages, overrideTools, true);
             }
         }
 
-        // Fallback Chain: Mistral -> Groq -> OpenRouter
+        // Fallback Chain: Mistral -> Groq -> OpenRouter (with STRICT JSON MODE)
         const activeClient = this.mistralClient || this.groqClient || this.fallbackClient;
         const model = this.mistralClient ? 'mistral-large-latest' : (this.groqClient ? 'llama-3.3-70b-versatile' : config.openRouterModel);
-
-        if (useFallback) {
-            // If explicit fallback requested, use OpenRouter directly
-            const finalClient = this.fallbackClient || activeClient;
-            if (!finalClient) throw new Error('No valid API keys configured.');
-
-            return await finalClient.chat.completions.create({
-                model: this.fallbackClient ? config.openRouterModel : model,
-                messages: messages,
-                // @ts-ignore
-                tools: overrideTools || allTools,
-                temperature: 0.7,
-            });
-        }
 
         if (!activeClient) {
             throw new Error('No valid API keys configured.');
         }
 
+        // Prep tools with strict: true if supported (OpenAI-compatible)
+        const toolsList = overrideTools || allTools;
+        const strictTools = toolsList.map((t: any) => ({
+            ...t,
+            strict: true // Enforce structured outputs where supported
+        }));
+
+        const completionConfig: any = {
+            model: useFallback ? (this.fallbackClient ? config.openRouterModel : model) : model,
+            messages: messages,
+            tools: strictTools,
+            temperature: 0.7,
+            response_format: { type: "json_object" } // Force JSON output for fallbacks
+        };
+
         try {
-            const response = await activeClient.chat.completions.create({
-                model: model,
-                messages: messages,
-                // @ts-ignore
-                tools: overrideTools || allTools,
-                temperature: 0.7,
-            });
+            const response = await activeClient.chat.completions.create(completionConfig);
             return response;
         } catch (error: any) {
-            console.warn(`Primary model (${model}) failed, falling back to OpenRouter...`, error.message);
-            return this.createChatCompletion(messages, overrideTools, true);
+            if (!useFallback) {
+                console.warn(`Primary fallback model (${model}) failed, attempting OpenRouter...`, error.message);
+                return this.createChatCompletion(messages, overrideTools, true);
+            }
+            throw error;
         }
     }
 

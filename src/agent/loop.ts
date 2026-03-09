@@ -85,7 +85,7 @@ function compressContext(messages: any[], maxTokens: number): any[] {
 export class AgentLoop {
     constructor() { }
 
-    async run(userId: string, userMessage: string): Promise<string> {
+    async run(userId: string, userMessage: string, notifier?: (msg: string) => Promise<void>): Promise<string> {
         console.log(`[UserId: ${userId}] Mensaje recibido: "${userMessage.substring(0, 100)}..."`);
 
         // El usuario y la respuesta final se guardan en BD (Aislamiento de Memoria)
@@ -100,6 +100,8 @@ export class AgentLoop {
         // Contexto aislado (scratchpad) de esta ejecución
         let loopMessages = [...history];
         let iterations = 0;
+        let evasionCount = 0;
+        let lastExecutionFailed = false;
         let currentState: OrchestratorState = OrchestratorState.THINKING;
         let finalOutput = "Sin respuesta generada.";
 
@@ -126,6 +128,26 @@ export class AgentLoop {
             }
 
             const responseMessage = response.choices[0].message;
+
+            // --- CANDADO ANTI-EVASIVAS (3 STRIKES) ---
+            if (lastExecutionFailed && (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0)) {
+                evasionCount++;
+                console.warn(`[UserId: ${userId}] Anti-Evasiva activada: Intento ${evasionCount}/3`);
+
+                if (evasionCount >= 3) {
+                    const fatalMsg = "Jefe, el agente se clavó en un loop de evasivas y lo maté para no gastar saldo. Revisá los logs.";
+                    console.error(`[UserId: ${userId}] FATAL ERROR: Máximo de evasivas alcanzado.`);
+                    if (notifier) await notifier(`🚨 **FATAL ERROR**: ${fatalMsg}`);
+                    currentState = OrchestratorState.ERROR;
+                    finalOutput = fatalMsg;
+                    break;
+                }
+
+                const rejectionMsg = "SISTEMA: ERROR CRÍTICO. No has llamado a ninguna herramienta para corregir el estado anterior (que falló). Es OBLIGATORIO usar una herramienta o el 'delegate_to_agent' corregido ahora. No se acepta texto plano.";
+                loopMessages.push({ role: 'system', content: rejectionMsg });
+                continue; // Volver a preguntar al LLM sin procesar esta respuesta "lazy"
+            }
+
             if (responseMessage.content) {
                 console.log(`[UserId: ${userId}] Jarvis dice: "${responseMessage.content.substring(0, 100)}..."`);
             }
@@ -134,6 +156,7 @@ export class AgentLoop {
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
                 // El LLM quiere hacer algo
                 currentState = OrchestratorState.EXECUTING_ACTION;
+                lastExecutionFailed = false; // Reset de flags si decide actuar
 
                 for (const toolCall of responseMessage.tool_calls) {
                     const functionName = toolCall.function.name;
@@ -142,17 +165,25 @@ export class AgentLoop {
 
                     try {
                         functionArgs = parseRobustJSON(toolCall.function.arguments);
-                        console.log(`[UserId: ${userId}] Executing tool: ${functionName}`);
+                        const toolMsg = `🛠️ Ejecutando: **${functionName}**${functionArgs.agentName ? ` (Subagente: ${functionArgs.agentName})` : ''}`;
+                        console.log(`[UserId: ${userId}] ${toolMsg}`);
+                        if (notifier) await notifier(toolMsg);
 
                         if (functionName.startsWith('mcp_')) {
                             functionResponse = await mcpManager.executeTool(functionName, functionArgs);
                         } else {
                             functionResponse = await executeCoreTool(functionName, functionArgs);
                         }
+
+                        if (notifier && functionName === 'delegate_to_agent') {
+                            await notifier(`✅ **${functionArgs.agentName}** terminó su tarea.`);
+                        }
                     } catch (error: any) {
                         console.error(`[Tool Execution Error]: ${error.message}`);
-                        // Le decimos a la IA explícitamente que falló el JSON
-                        functionResponse = `SYSTEM ALARM: Error procesando tus argumentos o ejecutando la herramienta (${error.message}). Por favor, verifica el JSON y reintenta.`;
+                        const errorMsg = `⚠️ Error en ${functionName}: ${error.message}`;
+                        if (notifier) await notifier(errorMsg);
+                        functionResponse = `SYSTEM ALARM: Error procesando tus argumentos o ejecutando la herramienta (${error.message}). Por favor, verifica el JSON y reintenta obligatoriamente con un tool_call corregido.`;
+                        lastExecutionFailed = true; // ACTIVAR CANDADO
                     }
 
                     loopMessages.push({

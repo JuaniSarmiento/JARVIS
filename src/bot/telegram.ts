@@ -25,13 +25,13 @@ async function sendLongMessage(ctx: any, text: string) {
   }
 }
 
+export const bot = new Bot(config.telegramBotToken);
+
 export function startBot() {
   if (!config.telegramBotToken || config.telegramBotToken === 'SUTITUYE POR EL TUYO') {
     console.error('❌ El TELEGRAM_BOT_TOKEN no está configurado. El bot no puede arrancar.');
     return;
   }
-
-  const bot = new Bot(config.telegramBotToken);
 
   // Security Middleware: Whitelist
   bot.use(async (ctx, next) => {
@@ -58,22 +58,26 @@ export function startBot() {
     }
   });
 
+  bot.command('async', async (ctx) => {
+    const userId = ctx.from?.id.toString();
+    const text = ctx.match;
+    if (!userId || !text) return ctx.reply('Uso: /async <tu tarea>');
+
+    // Inyectar a BullMQ
+    const { agentQueue } = await import('../queue/agent_queue.js');
+    await agentQueue.add('jarvis-task', { userId, message: text });
+    ctx.reply('🚀 **Tarea encolada en modo asíncrono para ejecución táctica.** Podés irte a dormir, te aviso por acá cuando termine.', { parse_mode: 'Markdown' });
+  });
+
   bot.on('message:text', async (ctx) => {
     const userId = ctx.from.id.toString();
     const text = ctx.message.text;
 
     try {
-      // Send a typing action to let the user know Jarvis is thinking
-      await ctx.replyWithChatAction('typing');
-
-      const response = await agentLoop.run(userId, text);
-
-      // Prevent empty message error from Telegram API
-      if (response && response.trim().length > 0) {
-        await sendLongMessage(ctx, response);
-      } else {
-        await ctx.reply('No pude generar una respuesta clara, por favor intenta nuevamente.');
-      }
+      // 100% Async Queuing
+      const { agentQueue } = await import('../queue/agent_queue.js');
+      await agentQueue.add('jarvis-task', { userId, message: text });
+      return ctx.reply('📥 **Tarea encolada en segundo plano.** Podés irte a hacer otra cosa, te notifico por acá cuando tu enjambre termine.', { parse_mode: 'Markdown' });
     } catch (error: any) {
       console.error(`Error procesando mensaje de ${userId}:`, error);
       ctx.reply('Ocurrió un error inesperado al procesar tu solicitud. ' + error.message);
@@ -98,11 +102,10 @@ export function startBot() {
       const transcription = await llmProvider.transcribeAudio(buffer, 'voice.ogg');
       console.log(`[Audio] Transcripción para ${userId}: ${transcription}`);
 
-      const aiResponse = await agentLoop.run(userId, transcription);
+      const { agentQueue } = await import('../queue/agent_queue.js');
+      await agentQueue.add('jarvis-task', { userId, message: transcription });
 
-      if (aiResponse) {
-        await sendLongMessage(ctx, `🎙 _"${transcription}"_\n\n${aiResponse}`);
-      }
+      return ctx.reply(`🎙 _"${transcription}"_\n\n📥 **Tarea de voz encolada en segundo plano.**`, { parse_mode: 'Markdown' });
     } catch (error: any) {
       console.error(`Error procesando audio de ${userId}:`, error);
       ctx.reply('Lo siento, tuve un problema procesando tu mensaje de voz. ' + error.message);
@@ -120,8 +123,4 @@ export function startBot() {
       console.log(`🤖 Jarvis Telegram Bot conectado y escuchando comandos como @${botInfo.username}`);
     }
   });
-
-  // graceful shutdown
-  process.once("SIGINT", () => bot.stop());
-  process.once("SIGTERM", () => bot.stop());
 }
