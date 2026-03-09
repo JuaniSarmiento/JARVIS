@@ -8,7 +8,7 @@ export interface SubAgentConfig {
 }
 
 export class SubAgent {
-    private MAX_ITERATIONS = 5;
+    private MAX_ITERATIONS = 10;
 
     constructor(private config: SubAgentConfig) { }
 

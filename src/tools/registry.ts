@@ -9,6 +9,8 @@ import { delegateToAgentDef, executeDelegateToAgent } from './delegate_to_agent.
 import { readFileDef, executeReadFile, writeFileDef, executeWriteFile, listDirDef, executeListDir } from './fs_tools.js';
 import { runScriptDef, executeRunScript } from './run_script.js';
 import { installSkillDef, executeInstallSkill } from './install_skill.js';
+import { getHealthMetricsDef, executeGetHealthMetrics } from './health_tools.js';
+import { getSportsDataDef, executeGetSportsData } from './sports_tools.js';
 
 export const allTools = [
     getCurrentTimeDef,
@@ -23,7 +25,9 @@ export const allTools = [
     writeFileDef,
     listDirDef,
     runScriptDef,
-    installSkillDef
+    installSkillDef,
+    getHealthMetricsDef,
+    getSportsDataDef
 ];
 
 export const mainJarvisTools = [
@@ -63,6 +67,10 @@ export async function executeTool(name: string, args: any): Promise<string> {
             return await executeRunScript(args);
         case 'install_skill':
             return await executeInstallSkill(args);
+        case 'get_health_metrics':
+            return await executeGetHealthMetrics(args);
+        case 'get_sports_data':
+            return await executeGetSportsData(args);
         default:
             throw new Error(`Tool ${name} not found`);
     }

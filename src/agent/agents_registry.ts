@@ -6,6 +6,8 @@ import { readFileDef, writeFileDef, listDirDef } from '../tools/fs_tools.js';
 import { runScriptDef } from '../tools/run_script.js';
 import { searchWebDef } from '../tools/search_web.js';
 import { readUrlDef } from '../tools/read_url.js';
+import { getHealthMetricsDef } from '../tools/health_tools.js';
+import { getSportsDataDef } from '../tools/sports_tools.js';
 
 // 1. CODING AGENT (CoderAgent)
 // El encargado de escribir el código siguiendo las directivas del orquestador.
@@ -41,7 +43,8 @@ export const qaAgent = new SubAgent({
     name: 'QA_Agent',
     systemPrompt: `Eres el QA_Agent de Jarvis. Tu misión es ser extremadamente crítico con el código del CoderAgent.
 Analizas lógica, seguridad, performance y mantenibilidad. 
-No dejes pasar un commit si no cumple con los estándares de calidad.`,
+Usa 'run_script' con comandos como 'npm run lint' o 'npm run build' para realizar validaciones estáticas.
+No dejes pasar un código si no compila o no cumple con los estándares de calidad.`,
     tools: [readFileDef, listDirDef, runScriptDef, formattingToolsDef]
 });
 
@@ -60,7 +63,7 @@ export const healthAgent = new SubAgent({
     name: 'HealthAgent',
     systemPrompt: `Eres el HealthAgent de Jarvis. Tu misión es analizar las métricas biométricas de Juani extraídas de su reloj inteligente.
 Debes buscar patrones de fatiga, calidad de sueño, variabilidad de frecuencia cardíaca y dar recomendaciones de salud basadas en datos.`,
-    tools: [searchWebDef, readUrlDef] // Podría expandirse con herramientas de DB o APIs de salud específicas.
+    tools: [searchWebDef, readUrlDef, getHealthMetricsDef]
 });
 
 // 6. SPORTS AGENT (SportsAgent)
@@ -69,7 +72,7 @@ export const sportsAgent = new SubAgent({
     name: 'SportsAgent',
     systemPrompt: `Eres el SportsAgent de Jarvis. Eres un "capo" absoluto en análisis táctico de fútbol y métricas de F1.
 Combinas datos históricos con análisis en tiempo real para dar opiniones fundamentadas sobre estrategias de carrera o esquemas tácticos de equipos.`,
-    tools: [searchWebDef, readUrlDef]
+    tools: [searchWebDef, readUrlDef, getSportsDataDef]
 });
 
 // 7. RESEARCH AGENT (Capo AI / StrategyAgent)

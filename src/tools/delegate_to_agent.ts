@@ -10,7 +10,7 @@ export const delegateToAgentDef = {
             properties: {
                 agentName: {
                     type: "string",
-                    enum: ["dev", "research", "workspace"],
+                    enum: ["coder", "doc", "qa", "deploy", "health", "sports", "research"],
                     description: "El nombre del subagente especializado."
                 },
                 taskDescription: {
