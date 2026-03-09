@@ -25,108 +25,181 @@ Always prioritize efficiency. If a complex plan is provided, BEGIN EXECUTION IMM
 Military rule: Mission first. If the user gives a clear multi-step command, execute all steps until the final result is ready or you need user input for a critical decision. Verifying 'critical actions' means things like deleting large data or high-cost transactions, NOT standard project creation.`;
 
 
-export class AgentLoop {
-    private MAX_ITERATIONS = 15;
+import { config } from '../config/env.js';
 
+enum OrchestratorState {
+    THINKING,
+    EXECUTING_ACTION,
+    RESPONDING,
+    ERROR
+}
+
+// 3. Parseo Robusto: Extrae JSON aunque esté envuelto en markdown
+function parseRobustJSON(text: string): any {
+    try {
+        // Primero intenta el parseo directo
+        return JSON.parse(text);
+    } catch (e) {
+        // Intenta buscar un bloque dentro de llaves
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                // Elimina caracteres inválidos comunes, saltos de línea molestos
+                const cleanStr = jsonMatch[0].replace(/\\n/g, '\\n').replace(/[\u0000-\u001F]+/g, " ");
+                return JSON.parse(cleanStr);
+            } catch (err2) {
+                console.error("Error en parseo robusto (Regex):", err2);
+            }
+        }
+        throw new Error("No se pudo extraer JSON válido de los argumentos.");
+    }
+}
+
+// 4. Compresión de Memoria Dinámica
+function compressContext(messages: any[], maxTokens: number): any[] {
+    // Estimación muy básica: 1 token ~= 4 caracteres
+    const calculateTokens = (msg: any) => (msg.content ? msg.content.length / 4 : 50);
+
+    let totalTokens = messages.reduce((acc, msg) => acc + calculateTokens(msg), 0);
+
+    if (totalTokens <= maxTokens) {
+        return messages;
+    }
+
+    console.log(`[Memory] Compresión activada: ${totalTokens} tokens calculados (Límite: ${maxTokens})`);
+
+    // Siempre conservamos el system prompt (index 0) y el mensaje de usuario original (index 1) si existe
+    const systemPrompt = messages[0];
+    const userPrompt = messages.length > 1 ? messages[1] : null;
+
+    // Buscamos cuánto recortar del medio para encajar
+    let finalMessages = userPrompt ? [systemPrompt, userPrompt] : [systemPrompt];
+    let currentTokens = calculateTokens(systemPrompt) + (userPrompt ? calculateTokens(userPrompt) : 0);
+
+    // Agarramos desde el final hacia el principio hasta llenar el límite
+    const tailMessages = [];
+    for (let i = messages.length - 1; i > (userPrompt ? 1 : 0); i--) {
+        const msgTks = calculateTokens(messages[i]);
+        if (currentTokens + msgTks < maxTokens) {
+            tailMessages.unshift(messages[i]);
+            currentTokens += msgTks;
+        } else {
+            break;
+        }
+    }
+
+    // Insertar un mensaje de advertencia del recorte de memoria
+    finalMessages.push({
+        role: 'system',
+        content: '[SISTEMA: El historial ha sido comprimido para ahorrar tokens. Detalles intermedios pueden faltar.]'
+    });
+
+    return [...finalMessages, ...tailMessages];
+}
+
+export class AgentLoop {
     constructor() { }
 
     async run(userId: string, userMessage: string): Promise<string> {
-        console.log(`[UserId: ${userId}] Mensaje recibido: "${userMessage.substring(0, 100)}${userMessage.length > 100 ? '...' : ''}"`);
-        // Save user message to Firebase
+        console.log(`[UserId: ${userId}] Mensaje recibido: "${userMessage.substring(0, 100)}..."`);
+
+        // El usuario y la respuesta final se guardan en BD (Aislamiento de Memoria)
         await memoryDb.addMessage(userId, { role: 'user', content: userMessage });
 
-        // Retrieve conversation history from Firebase
-        let messages = await memoryDb.getHistory(userId, 15);
+        let history = await memoryDb.getHistory(userId, 20);
 
-        // Ensure system prompt is at the top
-        if (messages.length === 0 || messages[0].role !== 'system') {
-            messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
+        if (history.length === 0 || history[0].role !== 'system') {
+            history = [{ role: 'system', content: SYSTEM_PROMPT }, ...history];
         }
 
+        // Contexto aislado (scratchpad) de esta ejecución
+        let loopMessages = [...history];
         let iterations = 0;
-        while (iterations < this.MAX_ITERATIONS) {
+        let currentState: OrchestratorState = OrchestratorState.THINKING;
+        let finalOutput = "Sin respuesta generada.";
+
+        // 1. Grafo de Estados Simple (FSM)
+        while ([OrchestratorState.THINKING, OrchestratorState.EXECUTING_ACTION].includes(currentState) && iterations < config.maxIterations) {
             iterations++;
+            console.log(`[UserId: ${userId}] [Estado: ${OrchestratorState[currentState]} | Iteración ${iterations}]`);
+
+            // Check Context size before query
+            loopMessages = compressContext(loopMessages, config.maxContextTokens);
 
             const mcpTools = mcpManager.getTools();
             const allTools = [...coreTools, ...mcpTools];
             const toolsPayload = allTools.length > 0 ? allTools : undefined;
 
-            console.log(`[UserId: ${userId}] [Iteración ${iterations}] Consultando a Jarvis Orchestrator...`);
-            const response = await llmProvider.createChatCompletion(messages, toolsPayload);
-            const choice = response.choices[0];
-            const responseMessage = choice.message;
+            let response;
+            try {
+                response = await llmProvider.createChatCompletion(loopMessages, toolsPayload);
+            } catch (err: any) {
+                console.error(`[Error de Conexión LLM]: ${err.message}`);
+                currentState = OrchestratorState.ERROR;
+                finalOutput = `Error crítico del proveedor LLM: ${err.message}`;
+                break;
+            }
 
+            const responseMessage = response.choices[0].message;
             if (responseMessage.content) {
-                console.log(`[UserId: ${userId}] Jarvis dice: "${responseMessage.content.substring(0, 100)}${responseMessage.content.length > 100 ? '...' : ''}"`);
+                console.log(`[UserId: ${userId}] Jarvis dice: "${responseMessage.content.substring(0, 100)}..."`);
             }
+            loopMessages.push(responseMessage);
 
-            // Sanitize assistant response for future LLM calls (remove reasoning_details and other non-standard fields)
-            const cleanAssistantMessage: any = {
-                role: 'assistant',
-                content: responseMessage.content || '',
-            };
-            if (responseMessage.tool_calls) {
-                cleanAssistantMessage.tool_calls = responseMessage.tool_calls;
-            }
-
-            // Add assistant response to both memory and current loop context
-            await memoryDb.addMessage(userId, {
-                ...cleanAssistantMessage,
-            });
-            messages.push(cleanAssistantMessage);
-
-            // Check if LLM wanted to call a tool
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+                // El LLM quiere hacer algo
+                currentState = OrchestratorState.EXECUTING_ACTION;
+
                 for (const toolCall of responseMessage.tool_calls) {
                     const functionName = toolCall.function.name;
-                    let functionArgs: any;
-
-                    try {
-                        const rawArgs = toolCall.function.arguments;
-                        // Basic cleaning to handle common LLM screw-ups with JSON
-                        const cleanArgs = rawArgs.replace(/\\n/g, '').trim();
-                        functionArgs = JSON.parse(cleanArgs);
-                    } catch (parseError) {
-                        console.error(`[Error] Failed to parse tool arguments for ${functionName}:`, toolCall.function.arguments);
-                        functionArgs = {}; // Fallback to empty object
-                    }
-
+                    let functionArgs: any = {};
                     let functionResponse: string;
+
                     try {
+                        functionArgs = parseRobustJSON(toolCall.function.arguments);
                         console.log(`[UserId: ${userId}] Executing tool: ${functionName}`);
+
                         if (functionName.startsWith('mcp_')) {
                             functionResponse = await mcpManager.executeTool(functionName, functionArgs);
                         } else {
                             functionResponse = await executeCoreTool(functionName, functionArgs);
                         }
                     } catch (error: any) {
-                        functionResponse = `Error executing tool: ${error.message}`;
+                        console.error(`[Tool Execution Error]: ${error.message}`);
+                        // Le decimos a la IA explícitamente que falló el JSON
+                        functionResponse = `SYSTEM ALARM: Error procesando tus argumentos o ejecutando la herramienta (${error.message}). Por favor, verifica el JSON y reintenta.`;
                     }
 
-                    const toolMessage = {
-                        role: 'tool',
-                        name: functionName,
-                        content: functionResponse,
-                        tool_call_id: toolCall.id,
-                    };
-
-                    await memoryDb.addMessage(userId, {
+                    loopMessages.push({
                         role: 'tool',
                         name: functionName,
                         content: functionResponse,
                         tool_call_id: toolCall.id
                     });
-                    messages.push(toolMessage);
                 }
-                // Continue loop to send tool responses back to LLM
-                continue;
-            }
 
-            // No tools called, return the response content
-            return responseMessage.content || 'Sin respuesta';
+                // Vuelve a pensar
+                currentState = OrchestratorState.THINKING;
+            } else {
+                // No hay tool calls, es una respuesta directa al usuario
+                currentState = OrchestratorState.RESPONDING;
+                finalOutput = responseMessage.content || "El orquestador no ofreció una respuesta final clara.";
+            }
         }
 
-        return "He alcanzado mi límite de iteraciones (5) tratando de resolver esto. Por favor replantea tu solicitud o pregúntame de otra forma.";
+        if (iterations >= config.maxIterations) {
+            finalOutput = `ALERTA DE SISTEMA: He alcanzado mi límite arquitectónico de iteraciones (${config.maxIterations}) por ciclo. Por favor, revisa el comando o divídelo en pasos más pequeños.`;
+            // Asegurarse de que el usuario vea el último intento
+            const lastMsg = loopMessages[loopMessages.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
+                finalOutput += `\n\nProgreso final: ${lastMsg.content}`;
+            }
+        }
+
+        // 2. Aislamiento de Memoria (Solo guardamos el resultado destilado, NO los logs de las tools)
+        await memoryDb.addMessage(userId, { role: 'assistant', content: finalOutput });
+
+        return finalOutput;
     }
 }
 

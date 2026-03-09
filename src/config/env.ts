@@ -12,6 +12,8 @@ export const config = {
     tavilyApiKey: process.env.TAVILY_API_KEY || '',
     ghToken: process.env.GH_TOKEN || '',
     googleAiApiKey: process.env.GEMINI_API_KEY || '',
+    maxIterations: parseInt(process.env.MAX_ITERATIONS || '15', 10),
+    maxContextTokens: parseInt(process.env.MAX_CONTEXT_TOKENS || '60000', 10),
 };
 
 // Validate critical env variables
