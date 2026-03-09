@@ -52,13 +52,23 @@ class LLMProvider {
                 let lastMessageContent = '';
 
                 if (firstUserIdx !== -1) {
-                    // History is everything between the first user message and the very last message.
-                    // The very last message is what we send with sendMessage.
                     const historySource = nonSystemMessages.slice(firstUserIdx, -1);
-                    history = historySource.map(m => ({
-                        role: m.role === 'assistant' ? 'model' : 'user',
-                        parts: [{ text: m.content || '' }]
-                    }));
+                    history = historySource.map(m => {
+                        let role = m.role === 'assistant' ? 'model' : 'user';
+                        let content = m.content || '';
+
+                        if (m.role === 'tool') {
+                            role = 'user';
+                            content = `[TOOL_RESULT from ${m.name}]: ${content}`;
+                        } else if (m.role === 'assistant' && m.tool_calls) {
+                            content += ` [ACTION: Called ${m.tool_calls[0].function.name}]`;
+                        }
+
+                        return {
+                            role: role,
+                            parts: [{ text: content }]
+                        };
+                    });
                     lastMessageContent = nonSystemMessages[nonSystemMessages.length - 1].content || '';
                 } else {
                     // Fallback: If no user message at all, just use the last one.
@@ -84,6 +94,7 @@ class LLMProvider {
                 };
 
                 if (callPart?.functionCall) {
+                    console.log(`[UserId: Gemini] Tool Call detected: ${callPart.functionCall.name}`);
                     responseMsg.tool_calls = [{
                         id: `call_${Date.now()}`,
                         type: 'function',
