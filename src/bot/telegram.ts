@@ -105,7 +105,9 @@ export function startBot() {
       // 100% Async Queuing
       const { agentQueue } = await import('../queue/agent_queue.js');
       await agentQueue.add('jarvis-task', { userId, message: text });
-      return ctx.reply('📥 **Tarea encolada en segundo plano.** Podés irte a hacer otra cosa, te notifico por acá cuando tu enjambre termine.', { parse_mode: 'Markdown' });
+
+      // Aviso sutil
+      return ctx.replyWithChatAction('typing');
     } catch (error: any) {
       console.error(`Error procesando mensaje de ${userId}:`, error);
       ctx.reply('Ocurrió un error inesperado al procesar tu solicitud. ' + error.message);

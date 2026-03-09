@@ -9,6 +9,7 @@ import { searchWebDef } from '../tools/search_web.js';
 import { readUrlDef } from '../tools/read_url.js';
 import { getHealthMetricsDef } from '../tools/health_tools.js';
 import { getSportsDataDef } from '../tools/sports_tools.js';
+import { sendFileDef } from '../tools/send_file.js';
 
 /**
  * 1. CODER AGENT (El Arquitecto de Código)
@@ -26,9 +27,10 @@ REGLAS DE ORO:
 4. Siempre que modifiques código, intenta ejecutar 'npm run build' o un script de prueba vía 'run_script' para validar.
 5. Si encuentras un bug en el código existente, REPORTEALO y proponé la corrección; no lo ignores.
 6. Utiliza 'github_native' para escribir directamente en el repositorio remoto.
+7. Si el usuario pide que le pases el proyecto por Telegram, podés usar 'send_file' pasándole el directorio.
 
 TU FIRMA: Código elegante, eficiente y listo para producción.`,
-    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, formattingToolsDef, githubNativeToolsDef]
+    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, formattingToolsDef, githubNativeToolsDef, sendFileDef]
 });
 
 /**
@@ -83,9 +85,10 @@ REGLAS DE ORO:
 2. Usa 'github_cli' o 'github_native' para gestionar repositorios, PRs y automatizaciones con 'gh'.
 3. Si configuras Docker, asegura que las imágenes sean multi-stage y livianas.
 4. Antes de un 'push', verifica que el proyecto compila localmente.
+5. Puedes enviar archivos o builds generados al usuario usando 'send_file'.
 
 TU FIRMA: Despliegues silenciosos, seguros y 100% automatizados.`,
-    tools: [runScriptDef, listDirDef, readFileDef, githubToolsDef, githubNativeToolsDef]
+    tools: [runScriptDef, listDirDef, readFileDef, githubToolsDef, githubNativeToolsDef, sendFileDef]
 });
 
 /**

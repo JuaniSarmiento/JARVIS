@@ -29,7 +29,8 @@ export const allTools = [
     installSkillDef,
     getHealthMetricsDef,
     getSportsDataDef,
-    githubNativeToolsDef
+    githubNativeToolsDef,
+    sendFileDef
 ];
 
 export const mainJarvisTools = [
@@ -38,7 +39,8 @@ export const mainJarvisTools = [
     searchWebDef,
     readUrlDef,
     n8nPrToolsDef,
-    installSkillDef
+    installSkillDef,
+    sendFileDef
 ];
 
 /**
@@ -80,6 +82,8 @@ export async function executeTool(name: string, args: any, onProgress?: (msg: st
             return await executeGetSportsData(args);
         case 'github_native':
             return await executeGithubNative(args);
+        case 'send_file':
+            return await executeSendFile(args, onProgress);
         default:
             throw new Error(`Herramienta no encontrada: ${name}`);
     }

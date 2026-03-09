@@ -11,6 +11,7 @@ import { redisConnection } from '../db/redis.js';
  */
 export enum OrchestratorState {
     INIT = "INIT",
+    REASONING = "REASONING",
     PLANNING = "PLANNING",
     EXECUTING = "EXECUTING",
     EVALUATING = "EVALUATING",
@@ -127,12 +128,16 @@ export class JarvisOrchestrator {
         };
 
         await redisConnection.set(`jarvis:status:${this.jobId}`, JSON.stringify(statusPayload), 'EX', 3600);
+        console.log(`🤖 [${this.state}] Progreso: ${progress}% - Pending: ${this.dag.filter(s => s.status === 'pending').length}`);
     }
 
     public async step(): Promise<void> {
         switch (this.state) {
             case OrchestratorState.INIT:
-                this.state = OrchestratorState.PLANNING;
+                this.state = OrchestratorState.REASONING;
+                break;
+            case OrchestratorState.REASONING:
+                await this.executeReasoning();
                 break;
             case OrchestratorState.PLANNING:
                 await this.executePlanning();
@@ -149,6 +154,35 @@ export class JarvisOrchestrator {
             default:
                 this.state = OrchestratorState.DONE;
         }
+    }
+
+    /**
+     * Fase 3: REASONING (Pensamiento Profundo Avanzado O1/O3-like)
+     */
+    private async executeReasoning(): Promise<void> {
+        if (this.onProgress) await this.onProgress("🧠 **REASONING**: Pensando profundamente antes de actuar...");
+
+        const lastMessage = this.history[this.history.length - 1]?.content || "";
+
+        // Obtenemos lista de herramientas
+        const toolsDesc = JSON.stringify(coreTools.map(t => ({ name: t.function.name, desc: t.function.description })));
+
+        const REASONING_PROMPT = `Eres el módulo de cognición profunda de Jarvis.
+Analiza la siguiente solicitud del usuario paso a paso (Chain of Thought).
+Tienes acceso a estas herramientas base: ${toolsDesc} y subagentes (coder, doc, deploy, qa).
+¿Qué es exactamente lo que pide? ¿Cuáles son los riesgos ocultos? ¿Qué estrategia debemos seguir?
+Genera una reflexión interna concisa y concluyente.`;
+
+        const reflection = await llmProvider.generateText(
+            [{ role: 'system', content: REASONING_PROMPT }, ...this.history, { role: 'user', content: `Analiza: ${lastMessage}` }]
+        );
+
+        console.log(`\n💭 [Internal Thoughts]:\n${reflection}\n`);
+
+        // Agregamos la reflexión de la IA al historial como mensaje de sistema (oculto mental)
+        this.history.push({ role: 'system', content: `[Internal Context/Strategy]: ${reflection}` });
+
+        this.state = OrchestratorState.PLANNING;
     }
 
     /**
@@ -191,7 +225,7 @@ export class JarvisOrchestrator {
         for (const step of runningSteps) {
             const startTime = (step as any).startedAt || now;
             if (now - startTime > STEP_TIMEOUT_MS) {
-                if (this.onProgress) await this.onProgress(`🚨 **TIMEOUT**: El paso ${step.id} excedió los 5 min. Forzando detención.`);
+                console.log(`🚨 **TIMEOUT**: El paso ${step.id} excedió los 5 min. Forzando detención.`);
                 step.status = "failed";
                 step.results = "ERROR: Timeout de ejecución crítica superado.";
             }
@@ -209,7 +243,8 @@ export class JarvisOrchestrator {
             return;
         }
 
-        if (this.onProgress) await this.onProgress(`⚡ **PARALLEL**: Disparando ${readySteps.length} tareas independientes...`);
+        // Silenciado en Telegram para no spamear
+        console.log(`⚡ **PARALLEL**: Disparando ${readySteps.length} tareas independientes...`);
 
         // Ejecución en paralelo real controlada por el DAG
         await Promise.allSettled(readySteps.map(async (step) => {
@@ -244,7 +279,7 @@ export class JarvisOrchestrator {
             return await executeCoreTool("delegate_to_agent", {
                 agentName: step.agent,
                 taskDescription: step.task || step.description
-            }, this.onProgress);
+            }); // Omitimos this.onProgress para no spamear Telegram con subagentes
         }
         return "Paso sin agente asignado.";
     }

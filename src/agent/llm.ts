@@ -260,6 +260,24 @@ class LLMProvider {
         throw new Error('Lo siento Jefe, se nos cayeron todos los enjambres de IAs tras múltiples reintentos.');
     }
 
+    /**
+     * Genera texto sin usar herramientas. Ideal para Reasoning y compresión de contexto.
+     */
+    async generateText(messages: any[]): Promise<string> {
+        return await withRetry(async () => {
+            const client = this.fallbackClient || this.copilotClient || this.groqClient;
+            if (!client) throw new Error("No hay cliente LLM disponible para generateText");
+
+            const response = await client.chat.completions.create({
+                model: config.openRouterModel || 'gpt-4o',
+                messages: messages,
+                temperature: 0.7,
+                stream: false
+            });
+            return response.choices[0].message?.content || "";
+        });
+    }
+
     async transcribeAudio(fileBuffer: Buffer, fileName: string): Promise<string> {
         if (!this.groqClient) {
             throw new Error('Groq client is not configured for transcription.');
