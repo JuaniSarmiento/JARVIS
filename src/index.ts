@@ -2,11 +2,25 @@ import { bot, startBot } from './bot/telegram.js';
 import { mcpManager } from './agent/mcp.js';
 import { startWorker } from './queue/agent_queue.js';
 import { startServer } from './server.js';
+import { spawn, ChildProcess } from 'child_process';
 
 console.log('Iniciando sistema Jarvis...');
 
 async function main() {
+    let copilotProxy: ChildProcess | null = null;
+
     try {
+        if (process.env.GH_TOKEN && process.env.GH_TOKEN !== '') {
+            console.log('🚀 Localizado GH_TOKEN. Lanzando Copilot Proxy integrado (npx copilot-api)...');
+            copilotProxy = spawn('npx', ['copilot-api', 'start', '--port', '4141'], {
+                shell: true,
+                stdio: 'pipe' // Para no ensuciar excesivamente los logs, aunque podemos hacerlo inherit
+            });
+
+            copilotProxy.stdout?.on('data', data => console.log(`[Copilot Proxy] ${data.toString().trim()}`));
+            copilotProxy.stderr?.on('data', data => console.error(`[Copilot Proxy Error] ${data.toString().trim()}`));
+        }
+
         console.log('📦 Inicializando MCP...');
         await mcpManager.init();
         console.log('✅ MCP listo.');
@@ -38,6 +52,11 @@ async function main() {
                 const { redisConnection } = await import('./db/redis.js');
                 console.log('Desconectando Redis...');
                 await redisConnection.quit();
+
+                if (copilotProxy) {
+                    console.log('Deteniendo Copilot Proxy...');
+                    copilotProxy.kill('SIGTERM');
+                }
 
                 console.log('✅ Graceful shutdown completado.');
                 process.exit(0);
