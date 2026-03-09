@@ -31,10 +31,17 @@ class LLMProvider {
     async createChatCompletion(messages: any[], overrideTools?: any[], useFallback = false): Promise<any> {
         if (!useFallback && this.geminiClient) {
             try {
+                // Determine tools to use and convert to Gemini format
+                const toolsList = overrideTools || allTools;
+                const functionDeclarations = toolsList.map((t: any) => ({
+                    name: t.function.name,
+                    description: t.function.description,
+                    parameters: t.function.parameters,
+                }));
+
                 const model = this.geminiClient.getGenerativeModel({
-                    model: 'models/gemini-2.5-flash-lite',
-                    // Note: Native SDK tool use is format-specific, but let's try direct completion first
-                    // or stick to the OpenAI style for consistency if possible.
+                    model: 'models/gemini-2.5-flash',
+                    tools: functionDeclarations.length > 0 ? [{ functionDeclarations }] : [],
                 });
 
                 // Gemini strictly requires the first message in history to be from 'user'.
@@ -65,14 +72,31 @@ class LLMProvider {
 
                 const result = await chat.sendMessage(lastMessageContent);
                 const response = await result.response;
-                const text = response.text();
+                const candidate = response.candidates?.[0];
+                const parts = candidate?.content?.parts || [];
+
+                const textPart = parts.find(p => p.text);
+                const callPart = parts.find(p => p.functionCall);
+
+                const responseMsg: any = {
+                    role: 'assistant',
+                    content: textPart?.text || ''
+                };
+
+                if (callPart?.functionCall) {
+                    responseMsg.tool_calls = [{
+                        id: `call_${Date.now()}`,
+                        type: 'function',
+                        function: {
+                            name: callPart.functionCall.name,
+                            arguments: JSON.stringify(callPart.functionCall.args)
+                        }
+                    }];
+                }
 
                 return {
                     choices: [{
-                        message: {
-                            role: 'assistant',
-                            content: text
-                        }
+                        message: responseMsg
                     }]
                 };
             } catch (error: any) {
