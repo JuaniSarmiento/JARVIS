@@ -15,6 +15,7 @@ export const coderAgent = new SubAgent({
     name: 'CoderAgent',
     systemPrompt: `Eres el CoderAgent de Jarvis. Tu único objetivo es escribir código limpio, eficiente y documentado.
 Trabajas en conjunto con el QA_Agent para asegurar que no haya errores.
+Optimiza el uso de tokens: lee archivos solo si es estrictamente necesario y trata de procesar la lógica de forma compacta.
 Puedes leer, escribir y ejecutar scripts para validar tu lógica.`,
     tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, formattingToolsDef]
 });
@@ -24,15 +25,8 @@ Puedes leer, escribir y ejecutar scripts para validar tu lógica.`,
 export const docAgent = new SubAgent({
     name: 'DocAgent',
     systemPrompt: `Eres el DocAgent de Jarvis. Tu especialidad es la documentación técnica y de negocio.
-Debes usar SIEMPRE estos archivos como base/plantilla cuando se te pida documentar:
-- requirements.md
-- proyecto.md
-- habilidades.md
-- especificacion.md
-- ejecucion.md
-- CLAUDE.md
-- arquitectura.md
-
+Debes usar SIEMPRE estos archivos como base/plantilla cuando se te pida documentar: requirements.md, proyecto.md, habilidades.md, especificacion.md, ejecucion.md, CLAUDE.md, arquitectura.md.
+Optimiza el uso de tokens: evita leer el mismo archivo múltiples veces y procesa la información de forma eficiente.
 Tu tono es profesional, estructurado y detallado. Eres el encargado de que el cliente entienda perfectamente el valor del proyecto.`,
     tools: [readFileDef, writeFileDef, searchWebDef, readUrlDef]
 });

@@ -22,6 +22,10 @@ export class SubAgent {
 
         let iterations = 0;
         while (iterations < this.MAX_ITERATIONS) {
+            // Trim messages if they grow too large to save tokens (keep system + initial user + last 10)
+            if (messages.length > 15) {
+                messages = [messages[0], messages[1], ...messages.slice(-10)];
+            }
             iterations++;
 
             // Usamos llmProvider para la inferencia, pasando las herramientas específicas del subagente
