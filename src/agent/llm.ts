@@ -1,11 +1,12 @@
 import OpenAI, { toFile } from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '../config/env.js';
 import { allTools } from '../tools/registry.js';
 
 class LLMProvider {
     private groqClient: OpenAI | null = null;
     private fallbackClient: OpenAI | null = null;
-    private geminiClient: OpenAI | null = null;
+    private geminiClient: GoogleGenerativeAI | null = null;
 
     constructor() {
         if (config.groqApiKey && config.groqApiKey !== 'SUTITUYE POR EL TUYO') {
@@ -16,10 +17,7 @@ class LLMProvider {
         }
 
         if (config.googleAiApiKey && config.googleAiApiKey !== '') {
-            this.geminiClient = new OpenAI({
-                apiKey: config.googleAiApiKey,
-                baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-            });
+            this.geminiClient = new GoogleGenerativeAI(config.googleAiApiKey);
         }
 
         if (config.openRouterApiKey && config.openRouterApiKey !== 'SUTITUYE POR EL TUYO') {
@@ -31,25 +29,64 @@ class LLMProvider {
     }
 
     async createChatCompletion(messages: any[], overrideTools?: any[], useFallback = false): Promise<any> {
-        let activeClient: OpenAI | null = null;
-        let model = '';
+        if (!useFallback && this.geminiClient) {
+            try {
+                const model = this.geminiClient.getGenerativeModel({
+                    model: 'models/gemini-2.5-flash-lite',
+                    // Note: Native SDK tool use is format-specific, but let's try direct completion first
+                    // or stick to the OpenAI style for consistency if possible.
+                });
 
-        if (useFallback) {
-            activeClient = this.fallbackClient;
-            model = config.openRouterModel;
-        } else {
-            // Prioridad: 1. Gemini Pro (Elite), 2. Groq (Fast), 3. OpenRouter (Fallback)
-            activeClient = this.geminiClient || this.groqClient || this.fallbackClient;
-            if (activeClient === this.geminiClient) model = 'gemini-1.5-pro';
-            else if (activeClient === this.groqClient) model = 'llama-3.3-70b-versatile';
-            else model = config.openRouterModel;
+                // Gemini strictly requires the first message in history to be from 'user'.
+                const nonSystemMessages = messages.filter(m => m.role !== 'system');
+                const firstUserIdx = nonSystemMessages.findIndex(m => m.role === 'user');
+
+                let history: any[] = [];
+                let lastMessageContent = '';
+
+                if (firstUserIdx !== -1) {
+                    // History is everything between the first user message and the very last message.
+                    // The very last message is what we send with sendMessage.
+                    const historySource = nonSystemMessages.slice(firstUserIdx, -1);
+                    history = historySource.map(m => ({
+                        role: m.role === 'assistant' ? 'model' : 'user',
+                        parts: [{ text: m.content || '' }]
+                    }));
+                    lastMessageContent = nonSystemMessages[nonSystemMessages.length - 1].content || '';
+                } else {
+                    // Fallback: If no user message at all, just use the last one.
+                    lastMessageContent = messages[messages.length - 1].content || '';
+                }
+
+                const chat = model.startChat({
+                    history: history,
+                    generationConfig: { temperature: 0.7 }
+                });
+
+                const result = await chat.sendMessage(lastMessageContent);
+                const response = await result.response;
+                const text = response.text();
+
+                return {
+                    choices: [{
+                        message: {
+                            role: 'assistant',
+                            content: text
+                        }
+                    }]
+                };
+            } catch (error: any) {
+                console.warn('Gemini Native failed, falling back to Groq...', error.message);
+                return this.createChatCompletion(messages, overrideTools, true);
+            }
         }
+
+        const activeClient = useFallback ? this.fallbackClient : (this.groqClient || this.fallbackClient);
+        const model = useFallback ? config.openRouterModel : 'llama-3.3-70b-versatile';
 
         if (!activeClient) {
-            throw new Error('No valid API keys configured for Gemini, Groq or OpenRouter. Check your .env file.');
+            throw new Error('No valid API keys configured.');
         }
-
-        const isUsingFallback = activeClient === this.fallbackClient;
 
         try {
             const response = await activeClient.chat.completions.create({
@@ -61,10 +98,11 @@ class LLMProvider {
             });
             return response;
         } catch (error: any) {
-            if (!isUsingFallback && this.fallbackClient) {
-                console.warn('Groq requested failed, falling back to OpenRouter...', error.message);
+            if (!useFallback && this.fallbackClient) {
+                console.warn('Primary model failed, falling back to OpenRouter...', error.message);
                 return this.createChatCompletion(messages, overrideTools, true);
             }
+            throw error;
         }
     }
 
