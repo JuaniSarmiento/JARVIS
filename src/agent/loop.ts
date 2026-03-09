@@ -15,7 +15,8 @@ export enum OrchestratorState {
     EXECUTING = "EXECUTING",
     EVALUATING = "EVALUATING",
     RESPONDING = "RESPONDING",
-    FATAL_ERROR = "FATAL_ERROR"
+    FATAL_ERROR = "FATAL_ERROR",
+    DONE = "DONE"
 }
 
 interface PlanStep {
@@ -33,8 +34,13 @@ Your mission is to ORCHESTRATE a swarm of specialized agents (the Elite Swarm).
 Be concise, surgical, and strategic. Your memory is limited; distill information.
 `;
 
-const PLANNING_PROMPT = `Genera un Grafo Acíclico Dirigido (DAG) de la misión.
-Responde ÚNICAMENTE con un JSON con esta estructura:
+const PLANNING_PROMPT = `Genera un Grafo Acíclico Dirigido (DAG) de la misión o una respuesta directa si la consulta es simple (saludos, charlas sencillas).
+Si es charla directa y NO requieres sub-agentes, responde ÚNICAMENTE con:
+{
+  "direct_response": "Tu respuesta directa para el usuario..."
+}
+
+Si la tarea es compleja y requiere delegar en sub-agentes, responde ÚNICAMENTE con:
 {
   "mission_goal": "...",
   "plan": [
@@ -42,6 +48,7 @@ Responde ÚNICAMENTE con un JSON con esta estructura:
     { "id": "step2", "description": "...", "dependsOn": ["step1"], "agent": "qa", "task": "..." }
   ]
 }
+⚠️ MUY IMPORTANTE: Los únicos valores válidos para "agent" son: "coder", "doc", "qa", "deploy", "health", "sports", "research". NUNCA inventes un agente que no esté en esta lista.
 `;
 
 export class JarvisOrchestrator {
@@ -77,7 +84,7 @@ export class JarvisOrchestrator {
         let shouldStop = false;
         while (!shouldStop) {
             const currentState = this.state as OrchestratorState;
-            if (currentState === OrchestratorState.RESPONDING || currentState === OrchestratorState.FATAL_ERROR) {
+            if (currentState === OrchestratorState.DONE || currentState === OrchestratorState.FATAL_ERROR) {
                 shouldStop = true;
                 break;
             }
@@ -136,8 +143,11 @@ export class JarvisOrchestrator {
             case OrchestratorState.EVALUATING:
                 await this.evaluateAndReplanning();
                 break;
+            case OrchestratorState.RESPONDING:
+                await this.executeResponding();
+                break;
             default:
-                this.state = OrchestratorState.RESPONDING;
+                this.state = OrchestratorState.DONE;
         }
     }
 
@@ -152,12 +162,17 @@ export class JarvisOrchestrator {
             const response = await llmProvider.createChatCompletion(messages, []);
             const parsed = parseRobustJSON(response.choices[0].message.content);
 
-            if (parsed.plan && Array.isArray(parsed.plan)) {
+            if (parsed.direct_response) {
+                this.history.push({ role: 'assistant', content: parsed.direct_response });
+                this.state = OrchestratorState.DONE;
+                if (this.onProgress) await this.onProgress("✨ **Respuesta Inmediata**: Conversación de bajo nivel detectada sin subagentes.");
+            } else if (parsed.plan && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
                 this.dag = parsed.plan.map((p: any) => ({ ...p, status: "pending" }));
                 if (this.onProgress) await this.onProgress(`📋 **Orden de Batalla**: ${this.dag.length} pasos estratégicos validados.`);
                 this.state = OrchestratorState.EXECUTING;
             } else {
-                this.state = OrchestratorState.RESPONDING;
+                this.history.push({ role: 'assistant', content: "El análisis no generó pasos ejecutables." });
+                this.state = OrchestratorState.DONE;
             }
         } catch (e) {
             this.state = OrchestratorState.FATAL_ERROR;
@@ -265,6 +280,24 @@ export class JarvisOrchestrator {
         if (this.history.length > 25) {
             if (this.onProgress) await this.onProgress("🧹 **CONSOLIDATING**: Comprimiendo memoria operativa...");
             this.history = [this.history[0], ...this.history.slice(-10)];
+        }
+    }
+
+    /**
+     * Tarea 4: Generación final de la respuesta tras completar el plan.
+     */
+    private async executeResponding(): Promise<void> {
+        if (this.onProgress) await this.onProgress("🗣️ **RESPONDING**: Consolidando reporte final...");
+        const reportPrompt = `La misión ha concluido. Todos los pasos del plan se ejecutaron.\nRedacta una respuesta final clara, amistosa y concisa resumiendo los resultados para el usuario basado en tu historial.`;
+
+        try {
+            const finalHistory = [...this.history, { role: 'system', content: reportPrompt }];
+            const response = await llmProvider.createChatCompletion(finalHistory, []);
+            this.history.push({ role: 'assistant', content: response.choices[0].message.content });
+            this.state = OrchestratorState.DONE;
+        } catch {
+            this.history.push({ role: 'assistant', content: "Misión finalizada. (El reporte narrativo falló, pero las acciones se ejecutaron)." });
+            this.state = OrchestratorState.FATAL_ERROR;
         }
     }
 

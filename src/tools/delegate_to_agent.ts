@@ -39,7 +39,7 @@ export async function executeDelegateToAgent(
     const agent = agentsRegistry[agentName];
 
     if (!agent) {
-        return `Error: El subagente ${agentName} no existe en el registro.`;
+        throw new Error(`Error: El subagente '${agentName}' no existe en el registro.`);
     }
 
     try {
@@ -50,6 +50,6 @@ export async function executeDelegateToAgent(
 
         return `REPORTE DEL SUBAGENTE ${agentName.toUpperCase()}:\n\n${report}`;
     } catch (e: any) {
-        return `Error durante la ejecución del subagente ${agentName}: ${e.message}`;
+        throw new Error(`Error durante la ejecución del subagente ${agentName}: ${e.message}`);
     }
 }
