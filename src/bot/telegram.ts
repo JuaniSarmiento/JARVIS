@@ -4,6 +4,27 @@ import { agentLoop } from '../agent/loop.js';
 import { llmProvider } from '../agent/llm.js';
 import { memoryDb } from '../db/firebase.js';
 
+// Helper to send long messages in chunks
+async function sendLongMessage(ctx: any, text: string) {
+  const MAX_LENGTH = 4000;
+  if (text.length <= MAX_LENGTH) {
+    return ctx.reply(text, { parse_mode: 'Markdown' }).catch(() => {
+      ctx.reply(text);
+    });
+  }
+
+  const chunks = [];
+  for (let i = 0; i < text.length; i += MAX_LENGTH) {
+    chunks.push(text.substring(i, i + MAX_LENGTH));
+  }
+
+  for (const chunk of chunks) {
+    await ctx.reply(chunk, { parse_mode: 'Markdown' }).catch(() => {
+      ctx.reply(chunk);
+    });
+  }
+}
+
 export function startBot() {
   if (!config.telegramBotToken || config.telegramBotToken === 'SUTITUYE POR EL TUYO') {
     console.error('❌ El TELEGRAM_BOT_TOKEN no está configurado. El bot no puede arrancar.');
@@ -49,10 +70,7 @@ export function startBot() {
 
       // Prevent empty message error from Telegram API
       if (response && response.trim().length > 0) {
-        // Send response preserving markdown formatting if possible, otherwise normal text
-        await ctx.reply(response, { parse_mode: 'Markdown' }).catch(() => {
-          ctx.reply(response); // Fallback to plain text if markdown parsing fails
-        });
+        await sendLongMessage(ctx, response);
       } else {
         await ctx.reply('No pude generar una respuesta clara, por favor intenta nuevamente.');
       }
@@ -83,9 +101,7 @@ export function startBot() {
       const aiResponse = await agentLoop.run(userId, transcription);
 
       if (aiResponse) {
-        await ctx.reply(`🎙 _"${transcription}"_\n\n${aiResponse}`, { parse_mode: 'Markdown' }).catch(() => {
-          ctx.reply(aiResponse);
-        });
+        await sendLongMessage(ctx, `🎙 _"${transcription}"_\n\n${aiResponse}`);
       }
     } catch (error: any) {
       console.error(`Error procesando audio de ${userId}:`, error);
