@@ -1,6 +1,6 @@
 import OpenAI, { toFile } from 'openai';
 import { config } from '../config/env.js';
-import { tools } from '../tools/registry.js';
+import { allTools } from '../tools/registry.js';
 
 class LLMProvider {
     private groqClient: OpenAI | null = null;
@@ -37,7 +37,7 @@ class LLMProvider {
                 model: model,
                 messages: messages,
                 // @ts-ignore
-                tools: overrideTools || tools,
+                tools: overrideTools || allTools,
                 temperature: 0.7,
             });
             return response;

@@ -2,7 +2,7 @@ import { SubAgent } from './subagent.js';
 import { githubToolsDef } from '../tools/github_tools.js';
 import { gogToolsDef } from '../tools/gog_tools.js';
 import { formattingToolsDef } from '../tools/formatting_tools.js';
-import { readFileDef, writeFileDef } from '../tools/fs_tools.js';
+import { readFileDef, writeFileDef, listDirDef } from '../tools/fs_tools.js';
 import { runScriptDef } from '../tools/run_script.js';
 import { searchWebDef } from '../tools/search_web.js';
 import { readUrlDef } from '../tools/read_url.js';
@@ -14,7 +14,7 @@ export const devAgent = new SubAgent({
     systemPrompt: `Eres el Agente Desarrollador de Juani. Tu objetivo es resolver tareas técnicas de programación, bugfixing y análisis de archivos locales.
 Puedes leer y escribir archivos, y ejecutar scripts en la terminal para probar cambios.
 Siempre reporta qué archivos cambiaste y el resultado de las pruebas.`,
-    tools: [readFileDef, writeFileDef, runScriptDef, githubToolsDef, formattingToolsDef]
+    tools: [readFileDef, writeFileDef, listDirDef, runScriptDef, githubToolsDef, formattingToolsDef]
 });
 
 // 2. AGENTE DE INVESTIGACIÓN (ResearchAgent)

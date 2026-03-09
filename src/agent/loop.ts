@@ -1,5 +1,5 @@
 import { llmProvider } from './llm.js';
-import { executeTool as executeCoreTool, tools as coreTools } from '../tools/registry.js';
+import { executeTool as executeCoreTool, mainJarvisTools as coreTools } from '../tools/registry.js';
 import { memoryDb } from '../db/firebase.js';
 import { mcpManager } from './mcp.js';
 
@@ -74,7 +74,7 @@ export class AgentLoop {
                 for (const toolCall of responseMessage.tool_calls) {
                     const functionName = toolCall.function.name;
                     let functionArgs: any;
-                    
+
                     try {
                         const rawArgs = toolCall.function.arguments;
                         // Basic cleaning to handle common LLM screw-ups with JSON
