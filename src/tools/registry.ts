@@ -12,6 +12,7 @@ import { runScriptDef, executeRunScript } from './run_script.js';
 import { installSkillDef, executeInstallSkill } from './install_skill.js';
 import { getHealthMetricsDef, executeGetHealthMetrics } from './health_tools.js';
 import { getSportsDataDef, executeGetSportsData } from './sports_tools.js';
+import { sendFileDef, executeSendFile } from './send_file.js';
 
 export const allTools = [
     getCurrentTimeDef,
