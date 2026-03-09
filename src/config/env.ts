@@ -11,6 +11,7 @@ export const config = {
     googleCredentials: process.env.GOOGLE_APPLICATION_CREDENTIALS || './service-account.json',
     tavilyApiKey: process.env.TAVILY_API_KEY || '',
     ghToken: process.env.GH_TOKEN || '',
+    googleAiApiKey: process.env.GEMINI_API_KEY || '',
 };
 
 // Validate critical env variables

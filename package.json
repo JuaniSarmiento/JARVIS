@@ -12,6 +12,7 @@
         "lint": "eslint src/ --ext .ts || echo 'Linter checks completed.'"
     },
     "dependencies": {
+        "@google/generative-ai": "^0.24.1",
         "@mcptools/mcp-tavily": "^1.0.0",
         "@modelcontextprotocol/sdk": "^1.27.1",
         "better-sqlite3": "^11.5.0",

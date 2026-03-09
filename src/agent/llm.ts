@@ -5,12 +5,20 @@ import { allTools } from '../tools/registry.js';
 class LLMProvider {
     private groqClient: OpenAI | null = null;
     private fallbackClient: OpenAI | null = null;
+    private geminiClient: OpenAI | null = null;
 
     constructor() {
         if (config.groqApiKey && config.groqApiKey !== 'SUTITUYE POR EL TUYO') {
             this.groqClient = new OpenAI({
                 apiKey: config.groqApiKey,
                 baseURL: 'https://api.groq.com/openai/v1',
+            });
+        }
+
+        if (config.googleAiApiKey && config.googleAiApiKey !== '') {
+            this.geminiClient = new OpenAI({
+                apiKey: config.googleAiApiKey,
+                baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
             });
         }
 
@@ -23,14 +31,25 @@ class LLMProvider {
     }
 
     async createChatCompletion(messages: any[], overrideTools?: any[], useFallback = false): Promise<any> {
-        const activeClient = useFallback ? this.fallbackClient : (this.groqClient || this.fallbackClient);
+        let activeClient: OpenAI | null = null;
+        let model = '';
+
+        if (useFallback) {
+            activeClient = this.fallbackClient;
+            model = config.openRouterModel;
+        } else {
+            // Prioridad: 1. Gemini Pro (Elite), 2. Groq (Fast), 3. OpenRouter (Fallback)
+            activeClient = this.geminiClient || this.groqClient || this.fallbackClient;
+            if (activeClient === this.geminiClient) model = 'gemini-1.5-pro';
+            else if (activeClient === this.groqClient) model = 'llama-3.3-70b-versatile';
+            else model = config.openRouterModel;
+        }
 
         if (!activeClient) {
-            throw new Error('No valid API keys configured for Groq or OpenRouter. Check your .env file.');
+            throw new Error('No valid API keys configured for Gemini, Groq or OpenRouter. Check your .env file.');
         }
 
         const isUsingFallback = activeClient === this.fallbackClient;
-        const model = isUsingFallback ? config.openRouterModel : 'llama-3.3-70b-versatile';
 
         try {
             const response = await activeClient.chat.completions.create({
