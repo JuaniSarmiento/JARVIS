@@ -29,7 +29,7 @@ export class SubAgent {
             }
             iterations++;
 
-            const response = await llmProvider.createChatCompletion(messages, this.config.tools, false);
+            const response = await llmProvider.createChatCompletion(messages, this.config.tools);
             const responseMessage = response.choices[0].message;
             messages.push(responseMessage);
 
