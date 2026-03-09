@@ -26,7 +26,7 @@ export const githubNativeToolsDef = {
                     enum: ["create_repo", "create_branch", "create_pr", "read_file", "write_file", "list_repos"],
                     description: "La acción a realizar."
                 },
-                repoName: { type: "string", description: "Nombre del repositorio (ej. 'JARVIS'). Requerido para la mayoría de acciones." },
+                repoName: { type: "string", description: "Nombre del repositorio (ej. 'JARVIS'). Requerido para la mayoría de acciones. Si no se provee o no es seguro, usa 'JARVIS' como default." },
                 owner: { type: "string", description: "Dueño del repositorio (ej. 'JuaniSarmiento'). Default: dueño autenticado." },
                 branchName: { type: "string", description: "Nombre de la rama. Requerido para create_branch, create_pr, read_file, write_file." },
                 baseBranch: { type: "string", description: "Rama base para crear nueva rama o PR (ej. 'main'). Default: 'main'." },
@@ -52,7 +52,7 @@ export async function executeGithubNative(args: any): Promise<string> {
         return `Error de Autenticación con GitHub: ${e.message}`;
     }
 
-    const { action, repoName, owner = authUser, branchName, baseBranch = 'main', filePath, content, commitMessage, prTitle, prBody, private: _private = true } = args;
+    const { action, repoName = 'JARVIS', owner = authUser, branchName, baseBranch = 'main', filePath, content, commitMessage, prTitle, prBody, private: _private = true } = args;
 
     try {
         switch (action) {
