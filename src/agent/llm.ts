@@ -139,8 +139,12 @@ class LLMProvider {
                     messages: messages,
                     tools: strictTools,
                     temperature: 0.7,
-                    response_format: { type: "json_object" }
                 };
+
+                // Groq error fix: don't use json_object mode if tools are present
+                if (!strictTools || strictTools.length === 0) {
+                    completionConfig.response_format = { type: "json_object" };
+                }
 
                 const response = await fallback.client!.chat.completions.create(completionConfig);
                 console.log(`✅ Respuesta obtenida de ${fallback.name}`);

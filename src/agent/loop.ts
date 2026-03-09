@@ -150,6 +150,34 @@ export class AgentLoop {
 
             if (responseMessage.content) {
                 console.log(`[UserId: ${userId}] Jarvis dice: "${responseMessage.content.substring(0, 100)}..."`);
+
+                // --- ESCUDO ANTI-JSON EN CONTENT (PARA FALLBACKS) ---
+                // Si el modelo devuelve JSON en el texto pero no en tool_calls
+                if (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0) {
+                    const content = responseMessage.content.trim();
+                    if (content.startsWith('{') && content.endsWith('}')) {
+                        try {
+                            const possibleTool = JSON.parse(content);
+                            if (possibleTool.name && possibleTool.arguments) {
+                                console.log(`[Memory] Detectado JSON bruto en content de ${userId}. Convirtiendo a tool_call...`);
+                                responseMessage.tool_calls = [{
+                                    id: `call_raw_${Date.now()}`,
+                                    type: 'function',
+                                    function: {
+                                        name: possibleTool.name,
+                                        arguments: typeof possibleTool.arguments === 'string'
+                                            ? possibleTool.arguments
+                                            : JSON.stringify(possibleTool.arguments)
+                                    }
+                                }];
+                                // Limpiamos el content para que no rompa Telegram con caracteres especiales
+                                responseMessage.content = `[Analizando misión: ${possibleTool.name}]`;
+                            }
+                        } catch (e) {
+                            // No es un JSON válido o no es una herramienta, ignoramos
+                        }
+                    }
+                }
             }
             loopMessages.push(responseMessage);
 
