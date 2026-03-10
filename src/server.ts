@@ -72,6 +72,8 @@ export function startServer() {
 
     // Dashboard SSE Events Endpoint (Reemplaza el de Next.js API Routes)
     app.get('/api/events', (req: Request, res: Response) => {
+        console.log('[SSE] 🟢 Nuevo cliente conectado al Dashboard');
+
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
         res.setHeader('Connection', 'keep-alive');
@@ -81,17 +83,21 @@ export function startServer() {
         const subscriber = redisConnection.duplicate();
 
         subscriber.subscribe('jarvis:events', 'jarvis:blocks', (err) => {
-            if (err) console.error('SSE Subscription Error:', err);
+            if (err) console.error('[SSE] ❌ Error al suscribirse en Redis:', err);
         });
 
         // Enviar evento inicial de conexión para verificar el handshake
         res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
 
         subscriber.on('message', (channel, message) => {
+            console.log(`[SSE] 📡 Enviando evento al frontend (${channel}): ${message.substring(0, 100)}...`);
             res.write(`data: ${message}\n\n`);
+            // Flush si es posible en el entorno subyacente
+            if ((res as any).flush) (res as any).flush();
         });
 
         req.on('close', () => {
+            console.log('[SSE] 🔴 Cliente desconectado del Dashboard');
             subscriber.disconnect();
         });
     });

@@ -20,7 +20,16 @@ export default function Home() {
   useEffect(() => {
     // SSE Connection to the Jarvis Kernel
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+    console.log(`🔌 [SSE] Intentando conectar a: ${apiUrl}/api/events`);
     const eventSource = new EventSource(`${apiUrl}/api/events`);
+
+    eventSource.onopen = () => {
+      console.log('✅ [SSE] Conectado exitosamente al Kernel');
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('❌ [SSE] Error en la conexión. Revisar CORS o URL incorrecta:', err);
+    };
 
     eventSource.onmessage = (e) => {
       try {
