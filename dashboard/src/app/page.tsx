@@ -16,6 +16,7 @@ export default function Home() {
     espejo: 'idle'
   });
   const [kernelState, setKernelState] = useState<'idle' | 'working'>('idle');
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
 
   useEffect(() => {
     // SSE Connection to the Jarvis Kernel
@@ -25,10 +26,12 @@ export default function Home() {
 
     eventSource.onopen = () => {
       console.log('✅ [SSE] Conectado exitosamente al Kernel');
+      setConnectionStatus('connected');
     };
 
     eventSource.onerror = (err) => {
       console.error('❌ [SSE] Error en la conexión. Revisar CORS o URL incorrecta:', err);
+      setConnectionStatus('error');
     };
 
     eventSource.onmessage = (e) => {
@@ -83,13 +86,21 @@ export default function Home() {
           </h1>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
             <span className="relative flex h-3 w-3">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${kernelState === 'working' ? 'bg-blue-400' : 'bg-emerald-400'}`}></span>
-              <span className={`relative inline-flex rounded-full h-3 w-3 ${kernelState === 'working' ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${connectionStatus === 'error' ? 'bg-red-400' :
+                  kernelState === 'working' ? 'bg-blue-400' : 'bg-emerald-400'
+                }`}></span>
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${connectionStatus === 'error' ? 'bg-red-500' :
+                  kernelState === 'working' ? 'bg-blue-500' : 'bg-emerald-500'
+                }`}></span>
             </span>
-            <span className={kernelState === 'working' ? 'text-blue-400 font-bold animate-pulse' : 'text-neutral-400'}>
-              {kernelState === 'working' ? 'Kernel Processing...' : 'Kernel Online'}
+            <span className={`flex flex-col ${connectionStatus === 'error' ? 'text-red-400' :
+                kernelState === 'working' ? 'text-blue-400 font-bold animate-pulse' : 'text-neutral-400'
+              }`}>
+              {connectionStatus === 'error' ? 'Connection Error (Check API URL)' :
+                kernelState === 'working' ? 'Kernel Processing...' : 'Kernel Online'}
+              {connectionStatus === 'connecting' && <span className="text-[10px] opacity-50">Connecting...</span>}
             </span>
           </div>
         </div>

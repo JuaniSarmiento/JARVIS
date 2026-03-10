@@ -74,6 +74,11 @@ export function startServer() {
     app.get('/api/events', (req: Request, res: Response) => {
         console.log('[SSE] 🟢 Nuevo cliente conectado al Dashboard');
 
+        // CORS Manual Headers for EventSource
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
         res.setHeader('Connection', 'keep-alive');
