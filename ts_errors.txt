@@ -1,0 +1,6 @@
+﻿src/departments/event_bus.ts(6,24): error TS2724: '"redis"' has no exported member named 'RedisClientType'. Did you mean 'RedisClient'?
+src/departments/event_bus.ts(26,33): error TS2339: Property 'redisUrl' does not exist on type '{ telegramBotToken: string; telegramAllowedUserIds: string[]; groqApiKey: string; openRouterApiKey: string; openRouterModel: string; dbPath: string; googleCredentials: string; tavilyApiKey: string; ... 6 more ...; maxContextTokens: number; }'.
+src/departments/event_bus.ts(38,67): error TS7006: Parameter 'message' implicitly has an 'any' type.
+src/departments/event_bus.ts(41,67): error TS7006: Parameter 'message' implicitly has an 'any' type.
+src/departments/event_bus.ts(44,72): error TS7006: Parameter 'message' implicitly has an 'any' type.
+src/departments/event_bus.ts(47,67): error TS7006: Parameter 'message' implicitly has an 'any' type.
