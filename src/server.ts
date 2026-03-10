@@ -12,6 +12,8 @@ export function startServer() {
     console.log('🚀 Iniciando Servidor Express y Dashboard de Bull Board...');
     const app = express();
     const port = process.env.PORT || 3000;
+    console.log(`[DEBUG] process.env.PORT detectado como: ${process.env.PORT}`);
+    console.log(`[DEBUG] Usando puerto efectivo: ${port}`);
 
     // Configuración de Bull Board
     const serverAdapter = new ExpressAdapter();

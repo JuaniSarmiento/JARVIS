@@ -13,7 +13,7 @@ interface MessageRow {
 }
 
 class FirebaseMemory {
-    private db: admin.firestore.Firestore;
+    private db?: admin.firestore.Firestore;
 
     constructor() {
         try {
@@ -24,9 +24,14 @@ class FirebaseMemory {
                 serviceAccount = JSON.parse(envServiceAccount);
                 console.log('📦 Usando credenciales de Firebase desde variable de entorno');
             } else {
-                const serviceAccountPath = join(process.cwd(), config.googleCredentials);
-                serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
-                console.log('📄 Usando credenciales de Firebase desde archivo local');
+                try {
+                    const serviceAccountPath = join(process.cwd(), config.googleCredentials);
+                    serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+                    console.log('📄 Usando credenciales de Firebase desde archivo local');
+                } catch (e) {
+                    console.warn('⚠️ No se encontró service-account.json ni FIREBASE_SERVICE_ACCOUNT. Jarvis funcionará sin memoria persistente en Firebase.');
+                    return; // No inicializar
+                }
             }
 
             if (!admin.apps.length) {
@@ -38,12 +43,13 @@ class FirebaseMemory {
             this.db.settings({ ignoreUndefinedProperties: true });
             console.log('✅ Firebase Firestore inicializado correctamente');
         } catch (error: any) {
-            console.error('❌ Error inicializando Firebase:', error.message);
-            throw new Error('No se pudo conectar a Firebase. Verifica service-account.json');
+            console.error('❌ Error crítico inicializando Firebase:', error.message);
+            // No lanzamos error para que el resto del sistema (Express, Bot) pueda arrancar
         }
     }
 
     public async addMessage(userId: string, msg: MessageRow) {
+        if (!this.db) return;
         const userDoc = this.db.collection('conversations').doc(userId);
         const messagesCol = userDoc.collection('messages');
 
@@ -54,6 +60,7 @@ class FirebaseMemory {
     }
 
     public async getHistory(userId: string, limit: number = 20): Promise<any[]> {
+        if (!this.db) return [];
         const messagesCol = this.db.collection('conversations').doc(userId).collection('messages');
         const snapshot = await messagesCol.orderBy('timestamp', 'desc').limit(limit).get();
 
@@ -73,6 +80,7 @@ class FirebaseMemory {
     }
 
     public async clearHistory(userId: string) {
+        if (!this.db) return;
         const messagesCol = this.db.collection('conversations').doc(userId).collection('messages');
         const snapshot = await messagesCol.get();
 
