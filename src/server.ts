@@ -82,6 +82,9 @@ export function startServer() {
             if (err) console.error('SSE Subscription Error:', err);
         });
 
+        // Enviar evento inicial de conexión para verificar el handshake
+        res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
+
         subscriber.on('message', (channel, message) => {
             res.write(`data: ${message}\n\n`);
         });
