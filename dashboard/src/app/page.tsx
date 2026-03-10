@@ -15,6 +15,7 @@ export default function Home() {
     sargento: 'idle',
     espejo: 'idle'
   });
+  const [kernelState, setKernelState] = useState<'idle' | 'working'>('idle');
 
   useEffect(() => {
     // SSE Connection to the Jarvis Kernel
@@ -31,12 +32,15 @@ export default function Home() {
 
         // Update dept states if the event mentions a department doing something
         if (payload.from && payload.type === 'TASK_START') {
-          setDepartmentStates(prev => ({ ...prev, [payload.from]: 'working' }));
+          if (payload.from === 'director') setKernelState('working');
+          else setDepartmentStates(prev => ({ ...prev, [payload.from]: 'working' }));
         } else if (payload.from && payload.type === 'TASK_COMPLETE') {
-          setDepartmentStates(prev => ({ ...prev, [payload.from]: 'idle' }));
+          if (payload.from === 'director') setKernelState('idle');
+          else setDepartmentStates(prev => ({ ...prev, [payload.from]: 'idle' }));
         } else if (payload.from && payload.type === 'BLOCK_REQUEST') {
-          setDepartmentStates(prev => ({ ...prev, [payload.from]: 'alert' }));
-          if (payload.payload?.target) {
+          if (payload.from !== 'director') setDepartmentStates(prev => ({ ...prev, [payload.from]: 'alert' }));
+
+          if (payload.payload?.target && payload.payload.target !== 'director') {
             setDepartmentStates(prev => ({ ...prev, [payload.payload.target]: 'blocked' }));
           }
         }
@@ -72,10 +76,12 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
             <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${kernelState === 'working' ? 'bg-blue-400' : 'bg-emerald-400'}`}></span>
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${kernelState === 'working' ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
             </span>
-            <span className="text-neutral-400">Kernel Online</span>
+            <span className={kernelState === 'working' ? 'text-blue-400 font-bold animate-pulse' : 'text-neutral-400'}>
+              {kernelState === 'working' ? 'Kernel Processing...' : 'Kernel Online'}
+            </span>
           </div>
         </div>
       </header>
