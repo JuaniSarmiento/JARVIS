@@ -53,10 +53,6 @@ COPY --from=builder --chown=jarvis:nodejs /app/src ./src
 
 # Variables de Entorno base (se inyectarán/sobrescribirán desde el dashboard cloud - Railway, Render, etc.)
 ENV NODE_ENV=production
-ENV PORT=3000
-
-# Exponemos el puerto de Express y Bull-Board
-EXPOSE 3000
 
 # Punto de entrada de la aplicación nativo para permitir envío correcto de procesos SIGTERM
 CMD ["node", "dist/index.js"]
