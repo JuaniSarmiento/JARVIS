@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
+import cors from 'cors';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
@@ -23,6 +24,12 @@ export function startServer() {
         queues: [new BullMQAdapter(agentQueue)],
         serverAdapter: serverAdapter,
     });
+
+    app.use(cors({
+        origin: '*', // Adjust this to the Netlify domain in production if needed
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
+    }));
 
     app.use(bodyParser.json());
 
@@ -84,7 +91,8 @@ export function startServer() {
         });
     });
 
-    // Servir el frontend compilado (Next.js static export)
+    // Servir el frontend compilado (Next.js static export) - REMOVED FOR NETLIFY
+    /*
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
@@ -98,6 +106,7 @@ export function startServer() {
     app.get('/', (req: Request, res: Response) => {
         res.sendFile(path.join(staticPath, 'index.html'));
     });
+    */
 
     // Endpoint genérico para recibir webhooks o peticiones de n8n
     app.post('/webhook', async (req: Request, res: Response) => {

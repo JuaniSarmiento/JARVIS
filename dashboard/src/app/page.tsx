@@ -18,7 +18,8 @@ export default function Home() {
 
   useEffect(() => {
     // SSE Connection to the Jarvis Kernel
-    const eventSource = new EventSource('/api/events');
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+    const eventSource = new EventSource(`${apiUrl}/api/events`);
 
     eventSource.onmessage = (e) => {
       try {
