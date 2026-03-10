@@ -9,16 +9,15 @@ WORKDIR /app
 
 # Copiar configuración de NPM (optimizando caché)
 COPY package.json package-lock.json* ./
+COPY dashboard/package.json dashboard/package-lock.json* ./dashboard/
 
 # Instalación estricta de dependencias respetando el lockfile
-# Usamos legacy-peer-deps para evitar los conflictos encontrados en BullMQ API
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps && cd dashboard && npm ci
 
 # Copiamos el resto del código y archivos críticos 
-COPY tsconfig.json .
-COPY src ./src
+COPY . .
 
-# Build Typescript (genera la carpeta /dist)
+# Build Typescript (genera la carpeta /dist y dashboard/out)
 RUN npm run build
 
 
@@ -45,6 +44,9 @@ RUN npm ci --only=production --legacy-peer-deps
 
 # Copiamos el build transpilado generado en la Etapa 1
 COPY --from=builder --chown=jarvis:nodejs /app/dist ./dist
+
+# Copiamos el dashboard estático (imprescindible para que Express lo sirva)
+COPY --from=builder --chown=jarvis:nodejs /app/dashboard/out ./dashboard/out
 
 # Copiamos el código fuente original para permitir Autoevaluación/Introspección por parte de CoderAgent
 COPY --from=builder --chown=jarvis:nodejs /app/src ./src
