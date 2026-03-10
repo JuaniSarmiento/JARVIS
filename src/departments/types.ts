@@ -8,6 +8,7 @@ export type ToolDefinition = any;
 
 // ─── Eventos inter-departamento ────────────────────────────────────────────
 export type EventType =
+    | 'TASK_START'
     | 'TASK_COMPLETE'
     | 'TASK_FAILED'
     | 'BLOCK_REQUEST'

@@ -2,6 +2,7 @@ import { bot, startBot } from './bot/telegram.js';
 import { mcpManager } from './agent/mcp.js';
 import { startWorker } from './queue/agent_queue.js';
 import { startServer } from './server.js';
+import { eventBus } from './departments/event_bus.js';
 import { spawn, ChildProcess } from 'child_process';
 
 console.log('Iniciando sistema Jarvis...');
@@ -24,6 +25,9 @@ async function main() {
         console.log('📦 Inicializando MCP...');
         await mcpManager.init();
         console.log('✅ MCP listo.');
+
+        console.log('🔌 Conectando Bus de Eventos inter-departamental...');
+        await eventBus.connect();
 
         console.log('⚙️ Iniciando Worker...');
         const worker = startWorker();
@@ -48,6 +52,9 @@ async function main() {
 
                 console.log('Cerrando Servidor Express...');
                 server.close();
+
+                console.log('Desconectando EventBus...');
+                await eventBus.disconnect();
 
                 const { redisConnection } = await import('./db/redis.js');
                 console.log('Desconectando Redis...');

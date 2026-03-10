@@ -9,6 +9,8 @@ import { eventBus } from './event_bus.js';
 import { memoryDb } from '../db/firebase.js';
 import { llmProvider } from '../agent/llm.js';
 import { config } from '../config/env.js';
+import { randomUUID } from 'crypto';
+import { SubAgent, SubAgentConfig } from '../agent/subagent.js';
 
 // Importar Departamentos
 import { arquitectoDept } from './arquitecto/index.js';
@@ -109,7 +111,7 @@ export class DirectorOrchestrator {
 
         // En una implementación real, aquí llamaríamos a eventBus.emit(TASK_START) 
         // y esperaríamos el TASK_COMPLETE asíncronamente. Por simplicidad del MVP:
-        const finalResponse = await this.simulateDepartmentExecution(dept, userMessage);
+        const finalResponse = await this.executeDepartment(dept, userMessage, this.onProgress);
 
         await memoryDb.addMessage(userId, { role: 'assistant', content: finalResponse });
         return finalResponse;
@@ -146,12 +148,56 @@ Responde ÚNICAMENTE con un JSON:
         ]);
     }
 
-    // Método temporal para simular la ejecución de un departamento hasta que implementemos el loop interno de cada uno
-    private async simulateDepartmentExecution(dept: DepartmentConfig, task: string): Promise<string> {
-        return await llmProvider.generateText([
-            { role: 'system', content: dept.systemPrompt },
-            { role: 'user', content: `MISIÓN ASIGNADA: ${task}\n\nResponde como el líder de tu departamento.` }
-        ]);
+    // Ejecución Real del Departamento
+    private async executeDepartment(dept: DepartmentConfig, task: string, onProgress?: (msg: string) => Promise<void>): Promise<string> {
+        const taskId = randomUUID();
+
+        // 1. Emitir evento TASK_START para que el Dashboard (Netlify) sepa que empezó a trabajar
+        await eventBus.emit({
+            id: taskId,
+            type: 'TASK_START',
+            from: dept.id,
+            to: 'director',
+            payload: { task },
+            timestamp: Date.now(),
+            priority: 'normal'
+        });
+
+        // 2. Consolidar herramientas del departamento (Director + Subagentes)
+        const allTools = [...(dept.tools || [])];
+        for (const sa of dept.subagents || []) {
+            allTools.push(...(sa.tools || []));
+        }
+
+        // 3. Crear y ejecutar el SubAgente real
+        const agentConfig: SubAgentConfig = {
+            name: dept.name,
+            systemPrompt: dept.systemPrompt + `\n\nTu misión actual es: ${task}\nUsa tus herramientas para resolverlo.`,
+            tools: allTools
+        };
+
+        const agent = new SubAgent(agentConfig);
+        let finalResponse = "";
+
+        try {
+            finalResponse = await agent.runTask(task, "", onProgress);
+        } catch (error: any) {
+            console.error(`[Director] Error en departamento ${dept.name}:`, error);
+            finalResponse = `Fallo en la ejecución del departamento: ${error.message}`;
+        }
+
+        // 4. Emitir evento TASK_COMPLETE para que el Dashboard lo pase a estado IDLE
+        await eventBus.emit({
+            id: randomUUID(),
+            type: 'TASK_COMPLETE',
+            from: dept.id,
+            to: 'director',
+            payload: { result: finalResponse },
+            timestamp: Date.now(),
+            priority: 'normal'
+        });
+
+        return finalResponse;
     }
 }
 
