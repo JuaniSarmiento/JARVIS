@@ -274,6 +274,12 @@ class LLMProvider {
                 temperature: 0.7,
                 stream: false
             });
+
+            if (!response || !response.choices || response.choices.length === 0) {
+                console.error("❌ [LLM] Respuesta vacía de chat.completions.create");
+                return "";
+            }
+
             return response.choices[0].message?.content || "";
         });
     }

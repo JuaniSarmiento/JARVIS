@@ -32,7 +32,17 @@ export class SubAgent {
             iterations++;
 
             const response = await llmProvider.createChatCompletion(messages, this.config.tools);
+
+            if (!response || !response.choices || response.choices.length === 0) {
+                console.error(`[SubAgent Error] ${this.config.name} recibió una respuesta vacía del LLM.`);
+                return `El subagente ${this.config.name} recibió una respuesta vacía del proveedor de IA.`;
+            }
+
             const responseMessage = response.choices[0].message;
+            if (!responseMessage) {
+                return `El subagente ${this.config.name} recibió un mensaje vacío.`;
+            }
+
             messages.push(responseMessage);
 
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
