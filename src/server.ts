@@ -5,6 +5,8 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { agentQueue } from './queue/agent_queue.js';
 import { redisConnection } from './db/redis.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 export function startServer() {
     console.log('🚀 Iniciando Servidor Express y Dashboard de Bull Board...');
@@ -57,6 +59,42 @@ export function startServer() {
         }
 
         res.json(JSON.parse(status));
+    });
+
+    // Dashboard SSE Events Endpoint (Reemplaza el de Next.js API Routes)
+    app.get('/api/events', (req: Request, res: Response) => {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const subscriber = redisConnection.duplicate();
+
+        subscriber.subscribe('jarvis:events', 'jarvis:blocks', (err) => {
+            if (err) console.error('SSE Subscription Error:', err);
+        });
+
+        subscriber.on('message', (channel, message) => {
+            res.write(`data: ${message}\n\n`);
+        });
+
+        req.on('close', () => {
+            subscriber.disconnect();
+        });
+    });
+
+    // Servir el frontend compilado (Next.js static export)
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    // The compiled Next.js output will be in dashboard/out
+    const staticPath = path.join(__dirname, '../dashboard/out');
+    console.log(`[Express] __dirname is: ${__dirname}`);
+    console.log(`[Express] Serving static files from: ${staticPath}`);
+
+    app.use(express.static(staticPath));
+    // SPA Fallback for Next.js routing
+    app.get('/', (req: Request, res: Response) => {
+        res.sendFile(path.join(staticPath, 'index.html'));
     });
 
     // Endpoint genérico para recibir webhooks o peticiones de n8n

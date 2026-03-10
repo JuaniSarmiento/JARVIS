@@ -7,7 +7,9 @@
     "scripts": {
         "dev": "tsx watch src/index.ts",
         "build": "tsc",
+        "build:all": "tsc && cd dashboard && npm install && npm run build",
         "start": "node dist/index.js",
+        "start:all": "node dist/index.js & cd dashboard && npm run start",
         "typecheck": "tsc --noEmit",
         "lint": "eslint src/ --ext .ts || echo 'Linter checks completed.'",
         "test": "vitest run",
